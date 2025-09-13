@@ -1,0 +1,21 @@
+# Ignore all
+*
+# Unignore all with extensions
+!*.*
+# Unignore all dirs
+!*/
+### Above combination will ignore all files without extension ###
+
+# Allow Makefile
+!Makefile
+!dconfig
+
+# Ignore files with certain extension
+*.swp
+*.pyc
+
+# Ignore build, devel, and logs folder
+log
+__pycache__
+.vscode
+videos
