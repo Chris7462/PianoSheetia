@@ -24,10 +24,6 @@ class PianoKeyDetector:
     WHITE_KEY_Y_RATIO = 0.75  # White keys in lower portion of piano
     BLACK_KEY_Y_RATIO = 0.35  # Black keys in upper portion of piano
 
-    # Note name indexing constants
-    A_NOTE_INDEX = 9  # Index of 'A' in note_names array
-    C_NOTE_INDEX = 3  # Index of 'C' in note_names array
-
     def __init__(self, template_path: str):
         if not template_path:
             raise ValueError("template_path is required and cannot be empty")
@@ -58,6 +54,19 @@ class PianoKeyDetector:
 
         print(f"Piano structure: {len(self.white_key_indices)} white keys, {len(self.black_key_indices)} black keys")
 
+    def build_88_key_pattern(self) -> List[str]:
+        """Build the complete 88-key piano pattern starting from A0"""
+        # 88-key piano: A0, A#0, B0, then 7 full octaves (C1 to B7), then C8
+        pattern = ['W', 'B', 'W']   # A0, A#0, B0
+
+        # Add complete octaves (C1 to B7)
+        pattern += self.octave_pattern * self.COMPLETE_OCTAVES
+
+        # Add final C8
+        pattern.append('W')
+
+        return pattern
+
     def load_template(self, template_path: str) -> bool:
         """Load piano template for boundary detection with validation"""
         try:
@@ -76,18 +85,34 @@ class PianoKeyDetector:
             print(f"Error loading template: {e}")
             return False
 
-    def build_88_key_pattern(self) -> List[str]:
-        """Build the complete 88-key piano pattern starting from A0"""
-        # 88-key piano: A0, A#0, B0, then 7 full octaves (C1 to B7), then C8
-        pattern = ['W', 'B', 'W']   # A0, A#0, B0
+    def detect_keys(self, image: np.ndarray) -> Tuple[List[Tuple[int, int]], List[float]]:
+        """
+        Main detection function that returns both key positions and brightness values
 
-        # Add complete octaves (C1 to B7)
-        pattern += self.octave_pattern * self.COMPLETE_OCTAVES
+        Args:
+            image: Input keyboard image
 
-        # Add final C8
-        pattern.append('W')
+        Returns:
+            Tuple of (key_positions, brightness_values)
+            - key_positions: List of (x, y) coordinates for all 88 keys
+            - brightness_values: List of brightness values at each key position
+        """
 
-        return pattern
+        # Step 1: Detect piano boundary using template matching
+        piano_boundary = self.detect_piano_boundary(image)
+
+        if piano_boundary is None:
+            print("Failed to detect piano boundary - cannot proceed with key detection")
+            return [], []
+
+        # Step 2: Calculate all key positions mathematically
+        key_positions = self.calculate_all_key_positions(piano_boundary)
+
+        # Step 3: Extract brightness values at key positions
+        brightness_values = self.extract_brightness_values(image, key_positions)
+
+        print(f"Successfully detected {len(key_positions)} piano keys with brightness values")
+        return key_positions, brightness_values
 
     def detect_piano_boundary(self, image: np.ndarray, confidence_threshold: float = 0.7) -> Optional[Tuple[int, int, int, int]]:
         """
@@ -188,9 +213,8 @@ class PianoKeyDetector:
         white_index = 0
         for i, key_type in enumerate(self.key_pattern):
             if key_type == 'W':
-                if white_index < len(white_positions):
-                    all_key_positions[i] = white_positions[white_index]
-                    white_index += 1
+                all_key_positions[i] = white_positions[white_index]
+                white_index += 1
 
         # Now place black keys between appropriate white keys
         for i, key_type in enumerate(self.key_pattern):
@@ -200,12 +224,14 @@ class PianoKeyDetector:
                 right_white_pos = all_key_positions[i+1]
 
                 if left_white_pos and right_white_pos:
+                    # TODO: Change it later. The black key is not at the center of two white keys
                     black_x = (left_white_pos[0] + right_white_pos[0]) // 2
                     all_key_positions[i] = (black_x, black_y)
 
-        # Validate final result
-        if len(all_key_positions) != self.TOTAL_KEYS:
-            print(f"Error: Expected {self.TOTAL_KEYS} keys, calculated {len(all_key_positions)}")
+        # Validate that all key positions were calculated
+        none_count = all_key_positions.count(None)
+        if none_count > 0:
+            print(f"Error: {none_count} key positions were not calculated")
 
         return all_key_positions
 
@@ -235,34 +261,88 @@ class PianoKeyDetector:
 
         return brightness_values
 
-    def detect_keys(self, image: np.ndarray) -> Tuple[List[Tuple[int, int]], List[float]]:
+    def verify_middle_c(self, brightness_values: List[float]) -> bool:
         """
-        Main detection function that returns both key positions and brightness values
+        Verify that the calculated middle C (index 39) is correct using brightness pattern matching.
+
+        Middle C should be a white key, and we verify the surrounding pattern matches piano structure.
+        Uses 128 as threshold: white keys >= 128, black keys < 128.
 
         Args:
-            image: Input keyboard image
+            brightness_values: List of 88 brightness values from extract_brightness_values
 
         Returns:
-            Tuple of (key_positions, brightness_values)
-            - key_positions: List of (x, y) coordinates for all 88 keys
-            - brightness_values: List of brightness values at each key position
+            True if middle C at index 39 appears correct
+
+        Raises:
+            ValueError: If middle C verification fails
         """
+        if len(brightness_values) != self.TOTAL_KEYS:
+            raise ValueError(f"Expected {self.TOTAL_KEYS} brightness values, got {len(brightness_values)}")
 
-        # Step 1: Detect piano boundary using template matching
-        piano_boundary = self.detect_piano_boundary(image)
+        THRESHOLD = 128
+        middle_c_index = 39  # Middle C4 position in 88-key piano (0-indexed)
 
-        if piano_boundary is None:
-            print("Failed to detect piano boundary - cannot proceed with key detection")
-            return [], []
+        # First check: Middle C (index 39) must be a white key
+        middle_c_brightness = brightness_values[middle_c_index]
+        if middle_c_brightness < THRESHOLD:
+            raise ValueError(f"Middle C verification failed: Index 39 brightness ({middle_c_brightness:.1f}) is below white key threshold ({THRESHOLD}). This suggests the key positioning is incorrect.")
 
-        # Step 2: Calculate all key positions mathematically
-        key_positions = self.calculate_all_key_positions(piano_boundary)
+        # Second check: Verify the 12-key pattern around Middle C (6 keys left + middle C + 5 keys right)
+        # This covers a full octave from F#3 to F4, centered on middle C
+        # Pattern: indices 34-45 representing F#3-G3-G#3-A3-A#3-B3-C4-C#4-D4-D#4-E4-F4
+        # Expected key types: B-W-B-W-B-W-W-B-W-B-W-W (one complete octave pattern)
+        expected_pattern = ['B', 'W', 'B', 'W', 'B', 'W', 'W', 'B', 'W', 'B', 'W', 'W']
+        pattern_start = 34  # Start from F#3 (5 keys left of middle C)
+        note_names = ['F#3', 'G3', 'G#3', 'A3', 'A#3', 'B3', 'C4(Middle C)', 'C#4', 'D4', 'D#4', 'E4', 'F4']
 
-        # Step 3: Extract brightness values at key positions
-        brightness_values = self.extract_brightness_values(image, key_positions)
+        pattern_brightness = []
+        for i, expected_type in enumerate(expected_pattern):
+            key_index = pattern_start + i
+            key_brightness = brightness_values[key_index]
+            pattern_brightness.append(key_brightness)
 
-        print(f"Successfully detected {len(key_positions)} piano keys with brightness values")
-        return key_positions, brightness_values
+            if expected_type == 'W' and key_brightness < THRESHOLD:
+                raise ValueError(f"Middle C verification failed: Expected white key at index {key_index} ({note_names[i]}), but brightness ({key_brightness:.1f}) indicates black key.")
+            elif expected_type == 'B' and key_brightness >= THRESHOLD:
+                raise ValueError(f"Middle C verification failed: Expected black key at index {key_index} ({note_names[i]}), but brightness ({key_brightness:.1f}) indicates white key.")
+
+        print(f"Middle C verification successful: Index 39 brightness = {middle_c_brightness:.1f}")
+        print(f"12-key octave pattern verification successful:")
+        for i, note in enumerate(note_names):
+            key_type = "White" if expected_pattern[i] == 'W' else "Black"
+            print(f"  {note}: {pattern_brightness[i]:.1f} ({key_type})")
+
+        return True
+
+#   def detect_keys_with_verification(self, image: np.ndarray) -> Tuple[List[Tuple[int, int]], List[float]]:
+#       """
+#       Enhanced detection function that includes middle C verification
+
+#       Args:
+#           image: Input keyboard image
+
+#       Returns:
+#           Tuple of (key_positions, brightness_values)
+
+#       Raises:
+#           ValueError: If middle C verification fails
+#       """
+#       # Perform standard key detection
+#       key_positions, brightness_values = self.detect_keys(image)
+
+#       if not key_positions:
+#           return key_positions, brightness_values
+
+#       # Verify middle C positioning
+#       try:
+#           self.verify_middle_c(brightness_values)
+#           print("Key detection and middle C verification completed successfully!")
+#       except ValueError as e:
+#           print(f"Key detection failed verification: {e}")
+#           raise
+
+#       return key_positions, brightness_values
 
     # def get_key_info(self, key_index: int) -> Optional[Dict]:
     #     """Get detailed information about a specific key"""
