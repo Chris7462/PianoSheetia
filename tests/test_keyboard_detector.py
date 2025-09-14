@@ -54,7 +54,6 @@ def create_debug_visualization(detector: PianoKeyDetector, image: np.ndarray, de
     cv2.imwrite(output_path, vis_image)
     print(f"Debug visualization saved as '{output_path}'")
 
-
 def detect_piano_keys(image_path: str, template_path: str):
     """Detect piano keys from a single image"""
     # Load image
@@ -65,13 +64,14 @@ def detect_piano_keys(image_path: str, template_path: str):
 
     # Create detector and detect keys
     detector = PianoKeyDetector(template_path)
-    key_positions = detector.detect_keys(image)
+    key_positions, brightness_values = detector.detect_keys(image)
 
     # Create debug info for visualization
     piano_boundary = detector.detect_piano_boundary(image)
     debug_info = {
         'piano_boundary': piano_boundary,
-        'key_positions': key_positions
+        'key_positions': key_positions,
+        'brightness_value' : brightness_values
     }
 
     # Create debug visualization
@@ -82,15 +82,10 @@ def detect_piano_keys(image_path: str, template_path: str):
     print(f"Total keys detected: {len(key_positions)}")
 
     # Show first few keys as examples
-    for i in range(min(10, len(key_positions))):
+    for i in range(len(key_positions)):
         x, y = key_positions[i]
         key_type = 'white' if detector.key_pattern[i] == 'W' else 'black'
-        print(f"Key {i:2d}: {key_type:5s} at ({x:3d}, {y:3d})")
-
-    if len(key_positions) > 10:
-        print(f"... and {len(key_positions) - 10} more keys")
-
-    return key_positions, detector
+        print(f'Key {i:2d}: {key_type:5s} at ({x:3d}, {y:3d}). Brightness: {brightness_values[i]:3f}')
 
 
 if __name__ == "__main__":

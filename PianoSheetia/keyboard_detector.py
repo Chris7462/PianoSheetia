@@ -10,6 +10,7 @@ class PianoKeyDetector:
     1. Template matching to locate piano boundary accurately
     2. Mathematical calculation of all 88 key positions
     3. Focus on precision for image-based piano key detection
+    4. Extract brightness values at key positions
     """
 
     # Piano structure constants
@@ -208,15 +209,43 @@ class PianoKeyDetector:
 
         return all_key_positions
 
-    def detect_keys(self, image: np.ndarray) -> List[Tuple[int, int]]:
+    def extract_brightness_values(self, image: np.ndarray, key_positions: List[Tuple[int, int]]) -> List[float]:
         """
-        Main detection function
+        Extract brightness values at key positions
+
+        Args:
+            image: Input image (color or grayscale)
+            key_positions: List of (x, y) coordinates for keys
+
+        Returns:
+            List of brightness values corresponding to each key position
+        """
+        # Convert to grayscale if needed
+        if len(image.shape) == 3:
+            gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray_image = image.copy()
+
+        brightness_values = []
+
+        for x, y in key_positions:
+            # Extract brightness value at the key position
+            brightness = float(gray_image[y, x])
+            brightness_values.append(brightness)
+
+        return brightness_values
+
+    def detect_keys(self, image: np.ndarray) -> Tuple[List[Tuple[int, int]], List[float]]:
+        """
+        Main detection function that returns both key positions and brightness values
 
         Args:
             image: Input keyboard image
 
         Returns:
-            key_positions
+            Tuple of (key_positions, brightness_values)
+            - key_positions: List of (x, y) coordinates for all 88 keys
+            - brightness_values: List of brightness values at each key position
         """
 
         # Step 1: Detect piano boundary using template matching
@@ -224,13 +253,16 @@ class PianoKeyDetector:
 
         if piano_boundary is None:
             print("Failed to detect piano boundary - cannot proceed with key detection")
-            return []
+            return [], []
 
         # Step 2: Calculate all key positions mathematically
         key_positions = self.calculate_all_key_positions(piano_boundary)
 
-        print(f"Successfully detected {len(key_positions)} piano keys")
-        return key_positions
+        # Step 3: Extract brightness values at key positions
+        brightness_values = self.extract_brightness_values(image, key_positions)
+
+        print(f"Successfully detected {len(key_positions)} piano keys with brightness values")
+        return key_positions, brightness_values
 
     # def get_key_info(self, key_index: int) -> Optional[Dict]:
     #     """Get detailed information about a specific key"""
