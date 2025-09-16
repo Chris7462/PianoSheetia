@@ -15,6 +15,7 @@
 *.pyc
 *.mid
 *.jpg
+*.pdf
 
 # Ignore build, devel, and logs folder
 log

@@ -221,7 +221,6 @@ class SheetConverter:
 
         for i, (current_state, last_state) in enumerate(zip(current_pressed, self.last_pressed)):
             if current_state != last_state:
-                key = self.keyboard[i]
                 midi_note = i + 21  # A0 = 21, so key index + 21
 
                 # Calculate timing
