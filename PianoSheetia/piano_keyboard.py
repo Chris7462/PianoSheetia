@@ -22,6 +22,7 @@ class PianoKey:
     x: Optional[int] = None
     y: Optional[int] = None
     brightness: Optional[float] = None
+    default_brightness: Optional[float] = None  # Baseline brightness for comparison
 
 
 class PianoKeyboard:
@@ -96,6 +97,10 @@ class PianoKeyboard:
         """Update a key's brightness"""
         self.keys[index].brightness = brightness
 
+    def get_key_colors(self) -> List[str]:
+        """Return list of key colors for compatibility with detector"""
+        return [key.type for key in self.keys]
+
     def __getitem__(self, index: int) -> PianoKey:
         """Allow keyboard[i] access to keys"""
         return self.keys[index]
@@ -111,16 +116,17 @@ class PianoKeyboard:
     def __repr__(self) -> str:
         """Return a detailed string representation of the piano keyboard"""
         lines = [f"PianoKeyboard with {self.TOTAL_KEYS} keys:"]
-        lines.append('-' * 60)
-        lines.append(f'{"Index":<5} {"Type":<4} {"Name":<6} {"X":<8} {"Y":<8} {"Brightness"}')
-        lines.append('-' * 60)
+        lines.append('-' * 80)
+        lines.append(f'{"Index":<5} {"Type":<4} {"Name":<6} {"X":<8} {"Y":<8} {"Brightness":<12} {"Default"}')
+        lines.append('-' * 80)
 
         for key in self.keys:
             x_str = str(key.x) if key.x is not None else "None"
             y_str = str(key.y) if key.y is not None else "None"
             brightness_str = f"{key.brightness:.3f}" if key.brightness is not None else "None"
+            default_str = f"{key.default_brightness:.3f}" if key.default_brightness is not None else "None"
 
             lines.append(f"{key.index:<5} {key.type:<4} {key.name:<6}"
-                         f"{x_str:<8} {y_str:<8} {brightness_str}")
+                         f"{x_str:<8} {y_str:<8} {brightness_str:<12} {default_str}")
 
         return "\n".join(lines)

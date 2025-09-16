@@ -7,7 +7,7 @@ A Python package for converting synthesia piano videos into sheet music.
 # Import main classes and functions
 from .piano_keyboard import PianoKeyboard, PianoKey
 from .video_downloader import VideoDownloader
-#from .keyboard_detector import KeyboardDetector
+from .keyboard_detector import KeyboardDetector
 
 # Package metadata
 __version__ = "0.1.0"
@@ -20,7 +20,7 @@ __all__ = [
     "PianoKey",
     "PianoKeyboard",
     "VideoDownloader",
-#    "KeyboardDetector",
+    "KeyboardDetector",
 ]
 
 # Optional: Add convenience imports for common use cases
