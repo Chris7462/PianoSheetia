@@ -1,8 +1,7 @@
 import sys
 import argparse
 import cv2
-import numpy as np
-from mido import Message, MidiFile, MidiTrack, MetaMessage
+from mido import Message, MidiFile, MidiTrack
 import os
 from PianoSheetia import VideoDownloader, KeyboardDetector, PianoKeyboard
 
