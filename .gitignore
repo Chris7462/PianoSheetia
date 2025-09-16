@@ -13,6 +13,8 @@
 # Ignore files with certain extension
 *.swp
 *.pyc
+*.mid
+*.jpg
 
 # Ignore build, devel, and logs folder
 log
