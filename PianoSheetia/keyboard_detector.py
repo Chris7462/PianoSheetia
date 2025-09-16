@@ -218,6 +218,7 @@ class KeyboardDetector:
         Raises:
             ValueError: If middle C verification fails
         """
+        # TODO: Think about a better way to verify the brightness
         THRESHOLD = 128
         middle_c_index = 39  # Middle C4 position in 88-key piano (0-indexed)
 

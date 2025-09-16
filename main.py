@@ -26,7 +26,7 @@ def sample_current_brightness(image, keyboard):
         gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
         gray_image = image
-    
+
     # Sample brightness at each key position
     for key in keyboard:
         if key.x is not None and key.y is not None:
@@ -35,7 +35,7 @@ def sample_current_brightness(image, keyboard):
             x = min(max(0, key.x), gray_image.shape[1] - 1)
             key.brightness = float(gray_image[y, x])
 
-def convert(video, output="out.mid", start=0, end=-1, threshold=30, template_path="data/template/piano-88-keys-0_5.png"):
+def convert(video, output="out.mid", threshold=30, template_path="data/template/piano-88-keys-0_5.png"):
     """Main conversion function"""
     mid = MidiFile()
     track = MidiTrack()
@@ -73,25 +73,23 @@ def convert(video, output="out.mid", start=0, end=-1, threshold=30, template_pat
         print(f"Could not open video: {input_video}")
         sys.exit(1)
 
-    frame_height, frame_width, _ = image.shape
     fps = vidcap.get(cv2.CAP_PROP_FPS)
-    print("Processing video at %dp@%.1f fps..." % (frame_height, fps))
-
-    start_frame = int(start * fps)
-    end_frame = int(end * fps) if end > 0 else -1
+    total_frames = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
+    duration = total_frames / fps
+    print(f'Processing entire video: {duration:.1f} seconds at {fps:.1f} fps ({total_frames} frames)...')
 
     last_pressed = []
     keyboard_detected = False
 
     while success:
-        if count == start_frame:
-            # Detect keyboard at start frame
+        # Detect keyboard on first frame
+        if count == 0:
             print("Detecting keyboard layout...")
             if not detector.detect(image, keyboard):
                 print("Failed to detect keyboard. Please check:")
                 print("1. Template file exists and is valid")
                 print("2. Video contains a visible piano")
-                print("3. Start time is appropriate")
+                print("3. Piano is clearly visible in the first frame")
                 sys.exit(1)
 
             # Verify detection quality
@@ -100,7 +98,7 @@ def convert(video, output="out.mid", start=0, end=-1, threshold=30, template_pat
                 print("Keyboard detection successful!")
             except ValueError as e:
                 print(f"Keyboard detection verification failed: {e}")
-                print("Detection may be inaccurate. Consider adjusting start time or template.")
+                print("Detection may be inaccurate. Consider using a different template.")
                 sys.exit(1)
 
             # Store default brightness values for comparison
@@ -126,7 +124,7 @@ def convert(video, output="out.mid", start=0, end=-1, threshold=30, template_pat
             keyboard_detected = True
             last_pressed = [0] * len(keyboard)
 
-        if count >= start_frame and keyboard_detected:
+        if keyboard_detected:
             # Sample current brightness at all key positions
             sample_current_brightness(image, keyboard)
 
@@ -137,10 +135,10 @@ def convert(video, output="out.mid", start=0, end=-1, threshold=30, template_pat
             for i, (current_pressed, last_state) in enumerate(zip(pressed, last_pressed)):
                 if current_pressed != last_state:
                     key = keyboard[i]
-                    
+
                     # Calculate MIDI note number (A0 = 21, so key index + 21)
                     midi_note = i + 21
-                    
+
                     if last_mod == 0 and count > fps:
                         last_mod = count - fps
 
@@ -157,18 +155,17 @@ def convert(video, output="out.mid", start=0, end=-1, threshold=30, template_pat
                                            time=int((count - last_mod) * (480 / fps))))
                         last_mod = count
 
-            print(f"Processing frame {count}...", end="\r")
+            # Show progress
+            progress_percent = (count / total_frames) * 100
+            print(f"Processing frame {count}/{total_frames} ({progress_percent:.1f}%)...", end="\r")
             last_pressed = pressed
 
         success, image = vidcap.read()
         count += 1
 
-        if end_frame > 0 and count > end_frame:
-            break
-
     vidcap.release()
     mid.save(output)
-    print(f"Saved as {output}!               ")
+    print(f"\nConversion complete! Saved as {output}")
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(
@@ -178,10 +175,6 @@ if __name__ == "__main__":
     ap.add_argument('video', help='YouTube URL or local video file (.mp4)')
     ap.add_argument('-o', '--output', type=str, default='out.mid',
                     help='Output MIDI file name (default: out.mid)')
-    ap.add_argument('-s', '--start', type=float, default=0,
-                    help='Start time in seconds (default: 0)')
-    ap.add_argument('-e', '--end', type=float, default=-1,
-                    help='End time in seconds (default: -1 for entire video)')
     ap.add_argument('-t', '--threshold', type=int, default=30,
                     help='Activation threshold for key press detection (default: 30)')
     ap.add_argument('--template', type=str, default='data/template/piano-88-keys-1_0.png',
@@ -189,5 +182,4 @@ if __name__ == "__main__":
 
     args = ap.parse_args()
 
-    convert(args.video, args.output, args.start, args.end,
-            args.threshold, args.template)
+    convert(args.video, args.output, args.threshold, args.template)
