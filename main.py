@@ -14,7 +14,7 @@ def main():
                     help='Output MIDI file name (default: output/out.mid)')
     ap.add_argument('-t', '--threshold', type=int, default=30,
                     help='Activation threshold for key press detection (default: 30)')
-    ap.add_argument('--template', type=str, default='data/template/piano-88-keys-1_0.png',
+    ap.add_argument('--template', type=str, default='data/template/piano-88-keys-0_5.png',
                     help='Path to piano template file for detection')
 
     args = ap.parse_args()

@@ -196,7 +196,7 @@ class SheetConverter:
                 cv2.circle(vis_image, (key.x, key.y), 5, (0, 255, 0), 1)
 
         cv2.imwrite("output/keyboard_detection.jpg", vis_image)
-        print("Keyboard detection visualization saved as 'keyboard_detection.jpg'")
+        print("Keyboard detection visualization saved as 'output/keyboard_detection.jpg'")
 
     def _process_frame(self, image, frame_count: int, fps: float) -> List[Message]:
         """
