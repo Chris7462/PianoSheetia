@@ -3,8 +3,8 @@ import argparse
 import cv2
 import numpy as np
 from mido import Message, MidiFile, MidiTrack, MetaMessage
-import yt_dlp
 import os
+from PianoSheetia import VideoDownloader
 
 # Constants
 MIN_KEY_WIDTH = 3
@@ -82,60 +82,20 @@ def extract_key_positions(keyboard):
     print("Detected", len(key_positions), "keys.")
     return key_positions, default_values, white_threshold, black_threshold
 
-def download_video_with_ytdlp(url, output_dir='videos/'):
-    """Download video using yt-dlp instead of pytube"""
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Configure yt-dlp options
-    ydl_opts = {
-        'format': 'mp4[height<=720]/best[height<=720]/best',  # Prefer 720p MP4 or best available
-        'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
-        'restrictfilenames': True,  # Remove special characters from filename
-        'noplaylist': True,  # Only download single video, not playlist
-    }
-
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            # Get video info first
-            info = ydl.extract_info(url, download=False)
-            title = info.get('title', 'video')
-
-            # Clean filename
-            safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            filename = os.path.join(output_dir, f"{safe_title}.mp4")
-
-            print(f"Downloading: {title}")
-
-            # Download the video
-            ydl.download([url])
-
-            # Find the downloaded file (yt-dlp might modify the filename)
-            for file in os.listdir(output_dir):
-                if file.endswith('.mp4') and safe_title.replace(' ', '_') in file.replace(' ', '_'):
-                    return os.path.join(output_dir, file)
-
-            # Fallback: return the expected filename
-            return filename
-
-        except Exception as e:
-            print(f"Error downloading video: {e}")
-            return None
-
-def convert(video, is_url, output="out.mid", start=0, end=-1, keyboard_height=0.85, threshold=30):
+def convert(video, output="out.mid", start=0, end=-1, keyboard_height=0.85, threshold=30):
     """Main conversion function"""
     mid = MidiFile()
     track = MidiTrack()
     mid.tracks.append(track)
 
-    if is_url:
-        print("Downloading video...")
-        input_video = download_video_with_ytdlp(video)
-        if input_video is None:
-            print("Failed to download video")
-            sys.exit(1)
-    else:
-        input_video = video
+    # Create VideoDownloader instance
+    video_downloader = VideoDownloader()
+
+    # Get video file (handles both URLs and local files)
+    input_video = video_downloader.get_video_file(video)
+    if input_video is None:
+        print("Failed to get video file")
+        sys.exit(1)
 
     vidcap = cv2.VideoCapture(input_video)
     success, image = vidcap.read()
@@ -233,8 +193,5 @@ if __name__ == "__main__":
 
     args = ap.parse_args()
 
-    # Determine if input is URL or local file
-    is_url = not args.video.endswith('.mp4')
-
-    convert(args.video, is_url, args.output, args.start, args.end,
+    convert(args.video, args.output, args.start, args.end,
             args.keyboard_height, args.threshold)

@@ -6,7 +6,6 @@ using yt-dlp, including saving to a local directory and retrieving
 file paths from either local files or URLs.
 """
 
-import sys
 import os
 import yt_dlp
 
@@ -60,7 +59,6 @@ class VideoDownloader:
             downloaded_file = self.download_video(path_or_url)
             if downloaded_file is None:
                 print("Failed to download video")
-                sys.exit(1)
             return downloaded_file
 
         return path_or_url
