@@ -217,64 +217,24 @@ def convert(video, is_url, output="out.mid", start=0, end=-1, keyboard_height=0.
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(
         description="Convert piano videos to MIDI files by analyzing key presses",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  %(prog)s "https://youtube.com/watch?v=xyz" -o song.mid
-  %(prog)s video.mp4 -s 30 -e 120 -t 40
-  %(prog)s piano_video.mp4 -k 0.8 --threshold 25
-        """
-    )
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    ap.add_argument('video',
-                    help='YouTube URL or local MP4 file path')
-
-    ap.add_argument('-o', '--output',
-                    type=str,
-                    default='out.mid',
+    ap.add_argument('video', help='YouTube URL or local video file (.mp4)')
+    ap.add_argument('-o', '--output', type=str, default='out.mid',
                     help='Output MIDI file name (default: out.mid)')
-
-    ap.add_argument('-s', '--start',
-                    type=float,
-                    default=0,
+    ap.add_argument('-s', '--start', type=float, default=0,
                     help='Start time in seconds (default: 0)')
-
-    ap.add_argument('-e', '--end',
-                    type=float,
-                    default=-1,
+    ap.add_argument('-e', '--end', type=float, default=-1,
                     help='End time in seconds (default: -1 for entire video)')
-
-    ap.add_argument('-k', '--keyboard-height',
-                    type=float,
-                    default=0.85,
+    ap.add_argument('-k', '--keyboard-height', type=float, default=0.85,
                     help='Proportional keyboard height from top (default: 0.85)')
-
-    ap.add_argument('-t', '--threshold',
-                    type=int,
-                    default=30,
+    ap.add_argument('-t', '--threshold', type=int, default=30,
                     help='Activation threshold for key press detection (default: 30)')
 
     args = ap.parse_args()
 
     # Determine if input is URL or local file
     is_url = not args.video.endswith('.mp4')
-
-    # Validate arguments
-    if args.keyboard_height <= 0 or args.keyboard_height >= 1:
-        print("Error: Keyboard height must be between 0 and 1")
-        sys.exit(1)
-
-    if args.threshold <= 0:
-        print("Error: Threshold must be positive")
-        sys.exit(1)
-
-    if args.start < 0:
-        print("Error: Start time cannot be negative")
-        sys.exit(1)
-
-    if args.end != -1 and args.end <= args.start:
-        print("Error: End time must be greater than start time")
-        sys.exit(1)
 
     convert(args.video, is_url, args.output, args.start, args.end,
             args.keyboard_height, args.threshold)
