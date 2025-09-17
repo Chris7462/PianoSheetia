@@ -161,14 +161,8 @@ class SheetConverter:
             print("3. Piano is clearly visible in the first frame")
             return False
 
-        # Verify detection quality
-        try:
-            self.detector.verify_middle_c(self.keyboard)
-            print("Keyboard detection successful!")
-        except ValueError as e:
-            print(f"Keyboard detection verification failed: {e}")
-            print("Detection may be inaccurate. Consider using a different template.")
-            return False
+        # Note: Verification is now handled internally by the detector.detect() method
+        print("Keyboard detection successful!")
 
         # Store default brightness values for comparison
         for key in self.keyboard:
