@@ -9,9 +9,10 @@ import cv2
 from mido import Message, MidiFile, MidiTrack
 from typing import Optional, List, Tuple
 
-from PianoSheetia import VideoDownloader
-from PianoSheetia import KeyboardDetector
-from PianoSheetia import PianoKeyboard
+from .video_downloader import VideoDownloader
+from .keyboard_detector import KeyboardDetector
+from .piano_keyboard import PianoKeyboard
+from .keyboard_visualizer import create_detection_visualization
 
 
 class SheetConverter:
@@ -168,29 +169,15 @@ class SheetConverter:
         for key in self.keyboard:
             key.default_brightness = key.brightness
 
-        # Create visualization of detected keys
-        self._create_detection_visualization(first_frame)
+        # Create visualization of detected keys using the visualization function
+        create_detection_visualization(
+            image=first_frame,
+            keyboard=self.keyboard,
+            piano_boundary=self.detector.piano_boundary,
+            output_path="output/keyboard_detection.jpg"
+        )
 
         return True
-
-    def _create_detection_visualization(self, image):
-        """Create and save keyboard detection visualization."""
-        vis_image = image.copy()
-
-        # Draw piano boundary
-        if self.detector.piano_boundary:
-            x, y, w, h = self.detector.piano_boundary
-            cv2.rectangle(vis_image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-        # Draw key positions
-        for key in self.keyboard:
-            if key.x is not None and key.y is not None:
-                color = (255, 255, 255) if key.type == 'W' else (0, 0, 0)
-                cv2.circle(vis_image, (key.x, key.y), 3, color, -1)
-                cv2.circle(vis_image, (key.x, key.y), 5, (0, 255, 0), 1)
-
-        cv2.imwrite("output/keyboard_detection.jpg", vis_image)
-        print("Keyboard detection visualization saved as 'output/keyboard_detection.jpg'")
 
     def _process_frame(self, image, frame_count: int, fps: float) -> List[Message]:
         """

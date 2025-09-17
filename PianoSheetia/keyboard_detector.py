@@ -3,7 +3,7 @@ import numpy as np
 from typing import Tuple, Optional
 import os
 
-from PianoSheetia import PianoKeyboard
+from .piano_keyboard import PianoKeyboard
 
 
 class KeyboardDetector:
