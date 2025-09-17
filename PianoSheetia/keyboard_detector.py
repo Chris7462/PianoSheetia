@@ -63,7 +63,7 @@ class KeyboardDetector:
                 return False
 
             # Step 3: Validate layout
-            return self._verify_middle_c(keyboard)
+            return self._verify_layout(keyboard)
 
         except Exception as e:
             print(f"Error during key detection: {e}")
@@ -203,7 +203,40 @@ class KeyboardDetector:
                 keyboard[i].y = black_y
                 keyboard[i].brightness = brightness
 
-        # Validate that all keys have been positioned
+        print(f"Successfully detected and positioned {len(keyboard)} piano keys")
+        return True
+
+    def _verify_layout(self, keyboard: PianoKeyboard) -> bool:
+        """
+        Verify the detected keyboard layout using multiple validation checks
+
+        Args:
+            keyboard: PianoKeyboard object to validate
+
+        Returns:
+            bool: True if layout verification passes, False otherwise
+        """
+        # Check 1: Validate detection completeness
+        if not self._validate_detection_completeness(keyboard):
+            return False
+
+        # Check 2: Verify middle C and surrounding pattern
+        try:
+            return self._verify_middle_c(keyboard)
+        except ValueError as e:
+            print(f"Layout verification failed: {e}")
+            return False
+
+    def _validate_detection_completeness(self, keyboard: PianoKeyboard) -> bool:
+        """
+        Validate that all keys have been properly positioned and have brightness values
+
+        Args:
+            keyboard: PianoKeyboard object to validate
+
+        Returns:
+            bool: True if all keys are complete, False otherwise
+        """
         unpositioned_keys = [i for i, key in enumerate(keyboard)
                              if key.x is None or key.y is None or key.brightness is None]
 
@@ -211,7 +244,6 @@ class KeyboardDetector:
             print(f"Failed to position {len(unpositioned_keys)} keys: {unpositioned_keys}")
             return False
 
-        print(f"Successfully detected and positioned {len(keyboard)} piano keys")
         return True
 
     def _verify_middle_c(self, keyboard: PianoKeyboard) -> bool:

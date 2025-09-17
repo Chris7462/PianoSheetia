@@ -85,8 +85,8 @@ class TestKeyboardDetector(unittest.TestCase):
         with patch.object(detector, '_detect_piano_boundary') as mock_boundary:
             mock_boundary.return_value = (50, 75, 700, 150)
 
-            # Mock the verification to return True
-            with patch.object(detector, '_verify_middle_c') as mock_verify:
+            # Mock the layout verification to return True
+            with patch.object(detector, '_verify_layout') as mock_verify:
                 mock_verify.return_value = True
 
                 result = detector.detect(mock_image, self.keyboard)
@@ -106,6 +106,23 @@ class TestKeyboardDetector(unittest.TestCase):
             self.assertFalse(result)
             self.assertIsNone(detector.piano_boundary)
 
+    def test_detect_with_failed_layout_verification(self):
+        """Test detection failure when layout verification fails"""
+        detector = KeyboardDetector(self.template_path)
+        mock_image = self.create_mock_piano_image()
+
+        with patch.object(detector, '_detect_piano_boundary') as mock_boundary:
+            mock_boundary.return_value = (50, 75, 700, 150)
+
+            with patch.object(detector, '_calculate_key_positions_and_sample_brightness') as mock_calc:
+                mock_calc.return_value = True
+
+                with patch.object(detector, '_verify_layout') as mock_verify:
+                    mock_verify.return_value = False
+
+                    result = detector.detect(mock_image, self.keyboard)
+                    self.assertFalse(result)
+
     def test_detect_with_grayscale_image(self):
         """Test detection with grayscale input image"""
         detector = KeyboardDetector(self.template_path)
@@ -114,7 +131,7 @@ class TestKeyboardDetector(unittest.TestCase):
 
         with patch.object(detector, '_detect_piano_boundary') as mock_boundary:
             mock_boundary.return_value = (50, 75, 700, 150)
-            with patch.object(detector, '_verify_middle_c') as mock_verify:
+            with patch.object(detector, '_verify_layout') as mock_verify:
                 mock_verify.return_value = True
 
                 result = detector.detect(gray_image, self.keyboard)
@@ -162,6 +179,106 @@ class TestKeyboardDetector(unittest.TestCase):
             self.assertIsNotNone(key.x)
             self.assertIsNotNone(key.y)
             self.assertIsNotNone(key.brightness)
+
+    def test_validate_detection_completeness_success(self):
+        """Test successful detection completeness validation"""
+        detector = KeyboardDetector(self.template_path)
+
+        # Set up keyboard with all keys properly positioned
+        for i, key in enumerate(self.keyboard):
+            key.x = i * 10
+            key.y = 100
+            key.brightness = 150.0
+
+        result = detector._validate_detection_completeness(self.keyboard)
+        self.assertTrue(result)
+
+    def test_validate_detection_completeness_missing_position(self):
+        """Test detection completeness validation with missing positions"""
+        detector = KeyboardDetector(self.template_path)
+
+        # Set up keyboard but leave some positions as None
+        for i, key in enumerate(self.keyboard):
+            if i < 5:  # First 5 keys missing position
+                key.x = None
+                key.y = None
+                key.brightness = None
+            else:
+                key.x = i * 10
+                key.y = 100
+                key.brightness = 150.0
+
+        result = detector._validate_detection_completeness(self.keyboard)
+        self.assertFalse(result)
+
+    def test_validate_detection_completeness_missing_brightness(self):
+        """Test detection completeness validation with missing brightness"""
+        detector = KeyboardDetector(self.template_path)
+
+        # Set up keyboard but leave some brightness values as None
+        for i, key in enumerate(self.keyboard):
+            key.x = i * 10
+            key.y = 100
+            if i < 3:  # First 3 keys missing brightness
+                key.brightness = None
+            else:
+                key.brightness = 150.0
+
+        result = detector._validate_detection_completeness(self.keyboard)
+        self.assertFalse(result)
+
+    def test_verify_layout_success(self):
+        """Test successful layout verification"""
+        detector = KeyboardDetector(self.template_path)
+
+        # Set up keyboard with proper values for both completeness and middle C verification
+        for i, key in enumerate(self.keyboard):
+            key.x = i * 10
+            key.y = 100
+            # Set brightness based on key type
+            if key.type == 'W':
+                key.brightness = 200.0  # Bright (above threshold)
+            else:
+                key.brightness = 50.0   # Dark (below threshold)
+
+        result = detector._verify_layout(self.keyboard)
+        self.assertTrue(result)
+
+    def test_verify_layout_fails_completeness(self):
+        """Test layout verification failure due to incomplete detection"""
+        detector = KeyboardDetector(self.template_path)
+
+        # Set up keyboard but leave some keys incomplete
+        for i, key in enumerate(self.keyboard):
+            if i < 2:  # First 2 keys incomplete
+                key.x = None
+                key.y = None
+                key.brightness = None
+            else:
+                key.x = i * 10
+                key.y = 100
+                key.brightness = 150.0
+
+        result = detector._verify_layout(self.keyboard)
+        self.assertFalse(result)
+
+    def test_verify_layout_fails_middle_c(self):
+        """Test layout verification failure due to middle C verification failure"""
+        detector = KeyboardDetector(self.template_path)
+
+        # Set up keyboard with complete detection but wrong middle C brightness
+        for i, key in enumerate(self.keyboard):
+            key.x = i * 10
+            key.y = 100
+            if i == 39:  # Middle C with wrong brightness
+                key.brightness = 50.0  # Too dark for white key
+            elif key.type == 'W':
+                key.brightness = 200.0
+            else:
+                key.brightness = 50.0
+
+        result = detector._verify_layout(self.keyboard)
+        self.assertFalse(result)
 
     def test_verify_middle_c_success(self):
         """Test successful middle C verification"""
@@ -275,6 +392,24 @@ class TestKeyboardDetector(unittest.TestCase):
         large_image = np.ones((100, 100), dtype=np.uint8)
         result = detector._detect_piano_boundary(large_image)
         # Should still return None due to poor match, but shouldn't crash
+
+    def test_integration_full_pipeline(self):
+        """Integration test for the complete detection pipeline"""
+        detector = KeyboardDetector(self.template_path)
+        mock_image = self.create_mock_piano_image()
+
+        # Mock only the boundary detection, let everything else run
+        with patch.object(detector, '_detect_piano_boundary') as mock_boundary:
+            mock_boundary.return_value = (50, 75, 700, 150)
+
+            # This should test the full pipeline:
+            # boundary detection -> positioning -> completeness validation -> middle C verification
+            result = detector.detect(mock_image, self.keyboard)
+
+            # The result depends on whether the mock image produces good enough
+            # brightness patterns for middle C verification
+            # At minimum, it shouldn't crash and should return a boolean
+            self.assertIsInstance(result, bool)
 
 
 if __name__ == '__main__':
