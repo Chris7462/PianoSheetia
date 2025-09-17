@@ -34,6 +34,41 @@ class KeyboardDetector:
         if template_path and os.path.exists(template_path):
             self._load_template(template_path)
 
+    def detect(self, image: np.ndarray, keyboard: PianoKeyboard) -> bool:
+        """
+        Main detection function that updates keyboard with positions and brightness
+
+        Args:
+            image: Input image with keyboard
+            keyboard: PianoKeyboard object to update
+
+        Returns:
+            bool: True if detection is successful, False otherwise
+        """
+        try:
+            # Convert to grayscale once for all processing
+            if len(image.shape) == 3:
+                gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            else:
+                gray_image = image.copy()
+
+            # Step 1: Detect piano boundary using template matching
+            self.piano_boundary = self._detect_piano_boundary(gray_image)
+            if self.piano_boundary is None:
+                print("Failed to detect piano boundary - cannot proceed with key detection")
+                return False
+
+            # Step 2: Calculate key positions and sample brightness
+            if not self._calculate_key_positions(gray_image, keyboard):
+                return False
+
+            # Step 3: Validate layout
+            return self._verify_middle_c(keyboard)
+
+        except Exception as e:
+            print(f"Error during key detection: {e}")
+            return False
+
     def _load_template(self, template_path: str) -> bool:
         """Load piano template for boundary detection with validation"""
         try:
@@ -52,41 +87,12 @@ class KeyboardDetector:
             print(f"Error loading template: {e}")
             return False
 
-    def detect(self, image: np.ndarray, keyboard: PianoKeyboard) -> bool:
-        """
-        Main detection function that updates keyboard with positions and brightness
-
-        Args:
-            image: Input keyboard image
-            keyboard: PianoKeyboard object to update
-
-        Returns:
-            bool: True if detection is successful, False otherwise
-        """
-        try:
-            # Step 1: Detect piano boundary using template matching
-            self.piano_boundary = self._detect_piano_boundary(image)
-            if self.piano_boundary is None:
-                print("Failed to detect piano boundary - cannot proceed with key detection")
-                return False
-
-            # Step 2: Calculate key positions and sample brightness
-            if not self._calculate_key_positions(image, keyboard):
-                return False
-
-            # Step 3: Validate layout
-            return self._verify_middle_c(keyboard)
-
-        except Exception as e:
-            print(f"Error during key detection: {e}")
-            return False
-
-    def _detect_piano_boundary(self, image: np.ndarray, confidence_threshold: float = 0.7) -> Optional[Tuple[int, int, int, int]]:
+    def _detect_piano_boundary(self, gray_image: np.ndarray, confidence_threshold: float = 0.7) -> Optional[Tuple[int, int, int, int]]:
         """
         Detect piano boundary using robust template matching
 
         Args:
-            image: Input image
+            image: Input grayscale image
             confidence_threshold: Minimum confidence for template match
 
         Returns:
@@ -95,12 +101,6 @@ class KeyboardDetector:
         if self._template_gray is None:
             print("Error: No template loaded for boundary detection")
             return None
-
-        # Convert image to grayscale
-        if len(image.shape) == 3:
-            gray_frame = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        else:
-            gray_frame = image.copy()
 
         # Multi-scale template matching - scales from 1.0 since template is smaller than input pianos
         scales = [round(1.0 + i * 0.1, 1) for i in range(21)]   # generate sequence from 1.0 to 3.0
@@ -115,7 +115,7 @@ class KeyboardDetector:
             new_h = int(self._template_h * scale)
 
             # Skip if template is larger than image
-            if new_h > gray_frame.shape[0] or new_w > gray_frame.shape[1]:
+            if new_h > gray_image.shape[0] or new_w > gray_image.shape[1]:
                 continue
 
             try:
@@ -123,7 +123,7 @@ class KeyboardDetector:
                 scaled_template = cv2.resize(self._template_gray, (new_w, new_h))
 
                 # Perform template matching with normalized correlation
-                result = cv2.matchTemplate(gray_frame, scaled_template, cv2.TM_CCOEFF_NORMED)
+                result = cv2.matchTemplate(gray_image, scaled_template, cv2.TM_CCOEFF_NORMED)
                 _, max_val, _, max_loc = cv2.minMaxLoc(result)
 
                 # Update best match if confidence is higher
@@ -148,7 +148,7 @@ class KeyboardDetector:
         print(f"Piano boundary detected: confidence={best_confidence:.3f}, scale={best_scale:.2f}, size={w}x{h}")
         return (x, y, w, h)
 
-    def _calculate_key_positions(self, image: np.ndarray, keyboard: PianoKeyboard) -> bool:
+    def _calculate_key_positions(self, gray_image: np.ndarray, keyboard: PianoKeyboard) -> bool:
         """
         Calculate positions for all keys and sample their brightness values
 
@@ -159,12 +159,6 @@ class KeyboardDetector:
         Returns:
             bool: True if positioning is successful, False otherwise
         """
-        # Convert image to grayscale for brightness sampling
-        if len(image.shape) == 3:
-            gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        else:
-            gray_image = image.copy()
-
         # Calculate white key positions first
         piano_x, piano_y, piano_w, piano_h = self.piano_boundary
         white_key_width = piano_w / self._NUM_WHITE_KEYS
@@ -198,7 +192,7 @@ class KeyboardDetector:
                 left_white_key = keyboard[i-1]
                 right_white_key = keyboard[i+1]
 
-                # TODO: Change it later. The black key is not at the center of two white keys
+                # TODO: adjust for real-world offset of black keys
                 black_x = (left_white_key.x + right_white_key.x) // 2
 
                 # Sample brightness at this position
@@ -242,6 +236,7 @@ class KeyboardDetector:
 
         # First check: Middle C (index 39) must be a white key
         middle_c = keyboard[middle_c_index]
+
         if middle_c.brightness is None or middle_c.brightness < THRESHOLD:
             raise ValueError(f"Middle C verification failed: Index 39 brightness ({middle_c.brightness}) is below white key threshold ({THRESHOLD}). This suggests the key positioning is incorrect.")
 
