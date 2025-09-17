@@ -1,0 +1,22 @@
+I want to refactor the code since I feel like some class is not well separated. Let's start with keyboard_detector.py. I'm thinking to separate this file into 1. boundary_detector.py for pinao boundary detection 2. position_calculator.py for key position calculation 3. layout_validator.py for validation logic What do you think? Do not touch other modules at this moment. Let's do it one by one. Do not implement it yet. Just tell me what's your thought about his separation? Should the be a private methods for each step?  _detect_boundary(), _calculate_positions(), _validate_layout()
+
+
+PianoSheetia/
+├── __init__.py
+├── config.py                    # All constants
+├── models/
+│   ├── piano_keyboard.py       # Keep as is - good model
+│   └── frame_data.py           # New: frame processing data structures
+├── detection/
+│   ├── boundary_detector.py    # Piano boundary detection
+│   ├── position_calculator.py  # Key position calculation  
+│   └── layout_validator.py     # Validation logic
+├── processing/
+│   ├── brightness_sampler.py   # Brightness sampling
+│   ├── frame_processor.py      # Frame-by-frame processing
+│   └── key_state_tracker.py    # Key state management
+├── midi/
+│   └── midi_generator.py       # All MIDI logic
+├── video/
+│   └── video_downloader.py     # Keep as is - focused
+└── sheet_converter.py          # Simplified orchestrator

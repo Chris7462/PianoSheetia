@@ -39,7 +39,7 @@ class KeyboardDetector:
         Main detection function that updates keyboard with positions and brightness
 
         Args:
-            image: Input image with keyboard
+            image: Input keyboard image
             keyboard: PianoKeyboard object to update
 
         Returns:
