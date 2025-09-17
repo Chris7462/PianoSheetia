@@ -31,8 +31,8 @@ class KeyboardDetector:
         # Piano boundary storage
         self.piano_boundary = None  # Stores (x, y, width, height) of detected piano boundary
 
-        if template_path and os.path.exists(template_path):
-            self._load_template(template_path)
+        # Load template immediately since path is validated
+        self._load_template(template_path)
 
     def detect(self, image: np.ndarray, keyboard: PianoKeyboard) -> bool:
         """
@@ -59,7 +59,7 @@ class KeyboardDetector:
                 return False
 
             # Step 2: Calculate key positions and sample brightness
-            if not self._calculate_key_positions(gray_image, keyboard):
+            if not self._calculate_key_positions_and_sample_brightness(gray_image, keyboard):
                 return False
 
             # Step 3: Validate layout
@@ -148,7 +148,7 @@ class KeyboardDetector:
         print(f"Piano boundary detected: confidence={best_confidence:.3f}, scale={best_scale:.2f}, size={w}x{h}")
         return (x, y, w, h)
 
-    def _calculate_key_positions(self, gray_image: np.ndarray, keyboard: PianoKeyboard) -> bool:
+    def _calculate_key_positions_and_sample_brightness(self, gray_image: np.ndarray, keyboard: PianoKeyboard) -> bool:
         """
         Calculate positions for all keys and sample their brightness values
 
@@ -260,10 +260,6 @@ class KeyboardDetector:
                 raise ValueError(f"Middle C verification failed: Expected black key at index {key_index} ({key.name}), but brightness ({key.brightness:.1f}) indicates white key.")
 
         print(f"Middle C verification successful: Index 39 ({middle_c.name}) brightness = {middle_c.brightness:.1f}")
-        print(f"12-key octave pattern verification successful:")
-        #   for i in range(12):
-        #       key = keyboard[pattern_start + i]
-        #       key_type = "White" if expected_colors[i] == 'W' else "Black"
-        #       print(f"  {key.name}: {key.brightness:.1f} ({key_type})")
+        print(f"12-key octave pattern verification successful.")
 
         return True
