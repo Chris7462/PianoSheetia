@@ -8,6 +8,7 @@ by analyzing key presses through computer vision.
 import cv2
 from mido import Message, MidiFile, MidiTrack
 from typing import Optional, List, Tuple
+from tqdm import tqdm
 
 from .video_downloader import VideoDownloader
 from .keyboard_detector import KeyboardDetector
@@ -30,18 +31,18 @@ class SheetConverter:
 
     def __init__(self, activation_threshold: int = 30,
                  template_path: str = "data/template/piano-88-keys-0_5.png",
-                 progress_callback=None):
+                 show_progress: bool = True):
         """
         Initialize the piano converter.
 
         Args:
             activation_threshold: Brightness change threshold for key press detection
             template_path: Path to piano template file for keyboard detection
-            progress_callback: Optional callback function for progress updates (current, total)
+            show_progress: Whether to show progress bar during conversion
         """
         self.activation_threshold = activation_threshold
         self.template_path = template_path
-        self.progress_callback = progress_callback or self._default_progress_callback
+        self.show_progress = show_progress
 
         # Initialize components
         self.video_downloader = VideoDownloader()
@@ -95,34 +96,45 @@ class SheetConverter:
             self.last_pressed = [0] * len(self.keyboard)
             self.last_mod = 0
 
-            # Process all frames
-            frame_count = 0
-            success = True
-
             # Reset video to beginning and process all frames
             video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-            while success:
-                success, image = video_capture.read()
-                if not success:
-                    break
+            # Process all frames with progress bar
+            success = True
+            frame_count = 0
 
-                # Process frame and generate MIDI events
-                midi_events = self._process_frame(image, frame_count, fps)
+            # Create progress bar
+            if self.show_progress:
+                pbar = tqdm(total=total_frames, desc="Processing frames", unit="frame")
 
-                # Add MIDI events to track
-                for event in midi_events:
-                    track.append(event)
+            try:
+                while success:
+                    success, image = video_capture.read()
+                    if not success:
+                        break
 
-                # Update progress
-                self.progress_callback(frame_count, total_frames)
+                    # Process frame and generate MIDI events
+                    midi_events = self._process_frame(image, frame_count, fps)
 
-                frame_count += 1
+                    # Add MIDI events to track
+                    for event in midi_events:
+                        track.append(event)
+
+                    frame_count += 1
+
+                    # Update progress bar
+                    if self.show_progress:
+                        pbar.update(1)
+
+            finally:
+                # Always close progress bar
+                if self.show_progress:
+                    pbar.close()
 
             # Cleanup and save
             video_capture.release()
             midi_file.save(output_path)
-            print(f"\nConversion complete! Saved as {output_path}")
+            print(f"Conversion complete! Saved as {output_path}")
             return True
 
         except Exception as e:
@@ -253,8 +265,3 @@ class SheetConverter:
             else:
                 pressed.append(0)
         return pressed
-
-    def _default_progress_callback(self, current: int, total: int):
-        """Default progress reporting to console."""
-        progress_percent = (current / total) * 100
-        print(f"Processing frame {current}/{total} ({progress_percent:.1f}%)...", end="\r")
