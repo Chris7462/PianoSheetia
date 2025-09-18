@@ -50,29 +50,40 @@ class MidiGenerator:
             self.previous_key_states = [0] * len(current_key_states)
 
         # Generate MIDI events for key state changes
+        events_in_this_frame = []
         for i, (current_state, previous_state) in enumerate(zip(current_key_states, self.previous_key_states)):
             if current_state != previous_state:
                 midi_note = i + 21  # A0 = 21, so key index + 21
-
-                # Calculate timing - matches original logic
-                if self.last_mod == 0 and self.frame_count > self.fps:
-                    self.last_mod = self.frame_count - self.fps
-
-                time_delta = int((self.frame_count - self.last_mod) * (self.MIDI_TICKS_PER_BEAT / self.fps))
 
                 if current_state == 1:
                     # Note on
                     event = Message('note_on', note=midi_note,
                                   velocity=self.MIDI_VELOCITY_ON,
-                                  time=time_delta)
+                                  time=0)  # Will set time for first event only
                 else:
                     # Note off
                     event = Message('note_off', note=midi_note,
                                   velocity=self.MIDI_VELOCITY_OFF,
-                                  time=time_delta)
+                                  time=0)  # Will set time for first event only
 
+                events_in_this_frame.append(event)
+
+        # Add events to track with proper timing
+        if events_in_this_frame:
+            # Calculate timing - matches original logic
+            if self.last_mod == 0 and self.frame_count > self.fps:
+                self.last_mod = self.frame_count - self.fps
+
+            time_delta = int((self.frame_count - self.last_mod) * (self.MIDI_TICKS_PER_BEAT / self.fps))
+
+            # First event gets the time delta, rest get 0
+            events_in_this_frame[0].time = time_delta
+
+            # Add all events to track
+            for event in events_in_this_frame:
                 self.track.append(event)
-                self.last_mod = self.frame_count
+
+            self.last_mod = self.frame_count
 
         # Update state for next frame
         self.previous_key_states = current_key_states.copy()
