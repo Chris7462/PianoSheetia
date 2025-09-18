@@ -9,6 +9,7 @@ from .piano_keyboard import PianoKeyboard, PianoKey
 from .video_downloader import VideoDownloader
 from .keyboard_detector import KeyboardDetector
 from .sheet_converter import SheetConverter
+from .midi_generator import MidiGenerator
 from .keyboard_visualizer import create_brightness_visualization, create_detection_visualization
 
 # Package metadata
@@ -24,6 +25,7 @@ __all__ = [
     "VideoDownloader",
     "KeyboardDetector",
     "SheetConverter",
+    "MidiGenerator",
     "create_brightness_visualization",
     "create_detection_visualization",
 ]

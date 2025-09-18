@@ -1,18 +1,19 @@
 """
 sheet_converter.py
 
-Provides the PianoConverter class for converting piano videos to MIDI files
+Provides the SheetConverter class for converting piano videos to MIDI files
 by analyzing key presses through computer vision.
 """
 
 import cv2
-from mido import Message, MidiFile, MidiTrack
-from typing import Optional, List, Tuple
+from typing import Optional, List
 from tqdm import tqdm
 
 from .video_downloader import VideoDownloader
 from .keyboard_detector import KeyboardDetector
 from .piano_keyboard import PianoKeyboard
+from .midi_generator import MidiGenerator
+
 from .keyboard_visualizer import create_detection_visualization
 
 
@@ -21,13 +22,9 @@ class SheetConverter:
     Main orchestrator for converting piano videos to MIDI files.
 
     Handles the complete conversion process from video input to MIDI output,
-    including keyboard detection, frame processing, and MIDI generation.
+    including keyboard detection and frame processing. MIDI generation is
+    delegated to the MidiGenerator class.
     """
-
-    # MIDI constants
-    MIDI_VELOCITY_ON = 64
-    MIDI_VELOCITY_OFF = 127
-    MIDI_TICKS_PER_BEAT = 480
 
     def __init__(self, activation_threshold: int = 30,
                  template_path: str = "data/template/piano-88-keys-0_5.png",
@@ -48,10 +45,7 @@ class SheetConverter:
         self.video_downloader = VideoDownloader()
         self.keyboard = PianoKeyboard()
         self.detector = KeyboardDetector(template_path)
-
-        # State for frame processing
-        self.last_pressed = []
-        self.last_mod = 0
+        self.midi_generator = None  # Will be created once we know the FPS
 
     def convert(self, video_path: str, output_path: str = "output/out.mid") -> bool:
         """
@@ -67,9 +61,6 @@ class SheetConverter:
         try:
             print(f"Starting conversion: {video_path} -> {output_path}")
 
-            # Setup MIDI file
-            midi_file, track = self._setup_midi()
-
             # Setup video capture
             video_capture = self._setup_video(video_path)
             if video_capture is None:
@@ -81,6 +72,9 @@ class SheetConverter:
             duration = total_frames / fps
             print(f'Processing entire video: {duration:.1f} seconds at {fps:.1f} fps ({total_frames} frames)...')
 
+            # Initialize MIDI generator with FPS
+            self.midi_generator = MidiGenerator(fps)
+
             # Process first frame for keyboard detection
             success, first_frame = video_capture.read()
             if not success:
@@ -91,10 +85,6 @@ class SheetConverter:
             if not self._detect_keyboard_layout(first_frame):
                 video_capture.release()
                 return False
-
-            # Initialize frame processing state
-            self.last_pressed = [0] * len(self.keyboard)
-            self.last_mod = 0
 
             # Reset video to beginning and process all frames
             video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -114,11 +104,9 @@ class SheetConverter:
                         break
 
                     # Process frame and generate MIDI events
-                    midi_events = self._process_frame(image, frame_count, fps)
-
-                    # Add MIDI events to track
-                    for event in midi_events:
-                        track.append(event)
+                    current_pressed = self._process_frame(image)
+                    if current_pressed is not None:
+                        self.midi_generator.process_frame(current_pressed)
 
                     frame_count += 1
 
@@ -133,20 +121,17 @@ class SheetConverter:
 
             # Cleanup and save
             video_capture.release()
-            midi_file.save(output_path)
-            print(f"Conversion complete! Saved as {output_path}")
-            return True
+
+            if self.midi_generator.save(output_path):
+                print(f"Conversion complete! Saved as {output_path}")
+                return True
+            else:
+                print("Failed to save MIDI file")
+                return False
 
         except Exception as e:
             print(f"Conversion failed: {e}")
             return False
-
-    def _setup_midi(self) -> Tuple[MidiFile, MidiTrack]:
-        """Create and setup MIDI file and track."""
-        midi_file = MidiFile(ticks_per_beat=self.MIDI_TICKS_PER_BEAT)
-        track = MidiTrack()
-        midi_file.tracks.append(track)
-        return midi_file, track
 
     def _setup_video(self, video_path: str) -> Optional[cv2.VideoCapture]:
         """Setup video capture from file or URL."""
@@ -174,7 +159,6 @@ class SheetConverter:
             print("3. Piano is clearly visible in the first frame")
             return False
 
-        # Note: Verification is now handled internally by the detector.detect() method
         print("Keyboard detection successful!")
 
         # Store default brightness values for comparison
@@ -191,52 +175,26 @@ class SheetConverter:
 
         return True
 
-    def _process_frame(self, image, frame_count: int, fps: float) -> List[Message]:
+    def _process_frame(self, image) -> Optional[List[int]]:
         """
-        Process a single frame and return MIDI events for key state changes.
+        Process a single frame and return current key states.
 
         Args:
             image: Current frame image
-            frame_count: Current frame number
-            fps: Video frames per second
 
         Returns:
-            List of MIDI Message objects for key state changes
+            List of key states (0/1) or None if processing failed
         """
-        # Sample current brightness at all key positions
-        self._sample_brightness(image)
+        try:
+            # Sample current brightness at all key positions
+            self._sample_brightness(image)
 
-        # Detect pressed keys
-        current_pressed = self._get_pressed_keys()
+            # Detect and return pressed keys
+            return self._get_pressed_keys()
 
-        # Generate MIDI events for key state changes
-        midi_events = []
-
-        for i, (current_state, last_state) in enumerate(zip(current_pressed, self.last_pressed)):
-            if current_state != last_state:
-                midi_note = i + 21  # A0 = 21, so key index + 21
-
-                # Calculate timing
-                if self.last_mod == 0 and frame_count > fps:
-                    self.last_mod = frame_count - fps
-
-                time_delta = int((frame_count - self.last_mod) * (self.MIDI_TICKS_PER_BEAT / fps))
-
-                if current_state == 1:
-                    # Note on
-                    midi_events.append(Message('note_on', note=midi_note,
-                                             velocity=self.MIDI_VELOCITY_ON, time=time_delta))
-                else:
-                    # Note off
-                    midi_events.append(Message('note_off', note=midi_note,
-                                             velocity=self.MIDI_VELOCITY_OFF, time=time_delta))
-
-                self.last_mod = frame_count
-
-        # Update state for next frame
-        self.last_pressed = current_pressed
-
-        return midi_events
+        except Exception as e:
+            print(f"Error processing frame: {e}")
+            return None
 
     def _sample_brightness(self, image):
         """Sample current brightness values for all keys."""
