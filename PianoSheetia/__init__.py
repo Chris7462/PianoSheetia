@@ -9,6 +9,7 @@ from .piano_keyboard import PianoKeyboard, PianoKey
 from .video_downloader import VideoDownloader
 from .keyboard_detector import KeyboardDetector
 from .sheet_converter import SheetConverter
+from .keyboard_visualizer import create_brightness_visualization, create_detection_visualization
 
 # Package metadata
 __version__ = "0.1.0"
@@ -23,6 +24,8 @@ __all__ = [
     "VideoDownloader",
     "KeyboardDetector",
     "SheetConverter",
+    "create_brightness_visualization",
+    "create_detection_visualization",
 ]
 
 # Optional: Add convenience imports for common use cases

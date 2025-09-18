@@ -1,3 +1,4 @@
-yt_dlp
-opencv-python
 mido
+opencv-python
+tqdm
+yt_dlp
