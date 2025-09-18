@@ -192,8 +192,21 @@ class KeyboardDetector:
                 left_white_key = keyboard[i-1]
                 right_white_key = keyboard[i+1]
 
-                # TODO: adjust for real-world offset of black keys
-                black_x = (left_white_key.x + right_white_key.x) // 2
+                # Determine offset based on the black key type
+                note_letter = keyboard[i].name[0]  # Get first letter (C, D, F, G, A)
+
+                # Magic numbers. Tuned by human integillent, not AI. Don't touch this section!
+                match note_letter:
+                    case 'C':
+                        black_x = int(left_white_key.x * 0.53 + right_white_key.x * 0.47)
+                    case 'D':
+                        black_x = int(left_white_key.x * 0.35 + right_white_key.x * 0.65)
+                    case 'F':
+                        black_x = int(left_white_key.x * 0.62 + right_white_key.x * 0.38)
+                    case 'G':
+                        black_x = (left_white_key.x + right_white_key.x) // 2
+                    case 'A':
+                        black_x = int(left_white_key.x * 0.3 + right_white_key.x * 0.7)
 
                 # Sample brightness at this position
                 brightness = float(gray_image[black_y, black_x])
