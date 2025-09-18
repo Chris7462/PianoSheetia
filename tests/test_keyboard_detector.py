@@ -236,7 +236,7 @@ class TestKeyboardDetector(unittest.TestCase):
             key.x = i * 10
             key.y = 100
             # Set brightness based on key type
-            if key.type == 'W':
+            if key.color == 'W':
                 key.brightness = 200.0  # Bright (above threshold)
             else:
                 key.brightness = 50.0   # Dark (below threshold)
@@ -272,7 +272,7 @@ class TestKeyboardDetector(unittest.TestCase):
             key.y = 100
             if i == 39:  # Middle C with wrong brightness
                 key.brightness = 50.0  # Too dark for white key
-            elif key.type == 'W':
+            elif key.color == 'W':
                 key.brightness = 200.0
             else:
                 key.brightness = 50.0
@@ -290,7 +290,7 @@ class TestKeyboardDetector(unittest.TestCase):
             key.x = i * 10  # Mock positions
             key.y = 100
             # Set brightness based on key type (white keys bright, black keys dark)
-            if key.type == 'W':
+            if key.color == 'W':
                 key.brightness = 200.0  # Bright (above threshold)
             else:
                 key.brightness = 50.0   # Dark (below threshold)
@@ -308,7 +308,7 @@ class TestKeyboardDetector(unittest.TestCase):
             key.y = 100
             if i == 39:  # Middle C
                 key.brightness = 50.0  # Too dark for white key
-            elif key.type == 'W':
+            elif key.color == 'W':
                 key.brightness = 200.0
             else:
                 key.brightness = 50.0
@@ -342,13 +342,13 @@ class TestKeyboardDetector(unittest.TestCase):
             # Deliberately set wrong brightness pattern
             if 33 <= i <= 44:  # Pattern around middle C
                 # Set opposite brightness (white keys dark, black keys bright)
-                if key.type == 'W':
+                if key.color == 'W':
                     key.brightness = 50.0   # Wrong: should be bright
                 else:
                     key.brightness = 200.0  # Wrong: should be dark
             else:
                 # Set correct brightness for other keys
-                if key.type == 'W':
+                if key.color == 'W':
                     key.brightness = 200.0
                 else:
                     key.brightness = 50.0

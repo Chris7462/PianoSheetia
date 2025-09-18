@@ -47,7 +47,7 @@ def create_detection_visualization(
 
         for key in keyboard:
             if key.x is not None and key.y is not None:
-                if key.type == 'W':
+                if key.color == 'W':
                     # White keys: white circle with green outline
                     cv2.circle(vis_image, (key.x, key.y), 3, (255, 255, 255), -1)
                     cv2.circle(vis_image, (key.x, key.y), 5, (0, 255, 0), 1)

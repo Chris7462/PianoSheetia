@@ -7,9 +7,9 @@ class TestPianoKey(unittest.TestCase):
 
     def test_piano_key_creation(self):
         """Test creating a PianoKey with all properties"""
-        key = PianoKey(index=0, type='W', name='A0', x=100, y=200, brightness=0.5)
+        key = PianoKey(index=0, color='W', name='A0', x=100, y=200, brightness=0.5)
         self.assertEqual(key.index, 0)
-        self.assertEqual(key.type, 'W')
+        self.assertEqual(key.color, 'W')
         self.assertEqual(key.name, 'A0')
         self.assertEqual(key.x, 100)
         self.assertEqual(key.y, 200)
@@ -17,9 +17,9 @@ class TestPianoKey(unittest.TestCase):
 
     def test_piano_key_defaults(self):
         """Test creating a PianoKey with default values"""
-        key = PianoKey(index=1, type='B', name='A#0')
+        key = PianoKey(index=1, color='B', name='A#0')
         self.assertEqual(key.index, 1)
-        self.assertEqual(key.type, 'B')
+        self.assertEqual(key.color, 'B')
         self.assertEqual(key.name, 'A#0')
         self.assertIsNone(key.x)
         self.assertIsNone(key.y)
@@ -37,27 +37,26 @@ class TestPianoKeyboard(unittest.TestCase):
         """Test that keyboard initializes with correct number of keys"""
         self.assertEqual(len(self.keyboard), 88)
         self.assertEqual(len(self.keyboard.keys), 88)
-        self.assertEqual(self.keyboard.TOTAL_KEYS, 88)
 
     def test_first_three_keys(self):
         """Test the first three keys (A0, A#0, B0)"""
         self.assertEqual(self.keyboard[0].name, 'A0')
-        self.assertEqual(self.keyboard[0].type, 'W')
+        self.assertEqual(self.keyboard[0].color, 'W')
         self.assertEqual(self.keyboard[0].index, 0)
 
         self.assertEqual(self.keyboard[1].name, 'A#0')
-        self.assertEqual(self.keyboard[1].type, 'B')
+        self.assertEqual(self.keyboard[1].color, 'B')
         self.assertEqual(self.keyboard[1].index, 1)
 
         self.assertEqual(self.keyboard[2].name, 'B0')
-        self.assertEqual(self.keyboard[2].type, 'W')
+        self.assertEqual(self.keyboard[2].color, 'W')
         self.assertEqual(self.keyboard[2].index, 2)
 
     def test_last_key(self):
         """Test the last key (C8)"""
         last_key = self.keyboard[87]
         self.assertEqual(last_key.name, 'C8')
-        self.assertEqual(last_key.type, 'W')
+        self.assertEqual(last_key.color, 'W')
         self.assertEqual(last_key.index, 87)
 
     def test_octave_pattern(self):
@@ -69,24 +68,24 @@ class TestPianoKeyboard(unittest.TestCase):
                 ('G#1', 'B'), ('A1', 'W'), ('A#1', 'B'), ('B1', 'W')
                 ]
 
-        for i, (expected_name, expected_type) in enumerate(expected_c1_octave):
+        for i, (expected_name, expected_color) in enumerate(expected_c1_octave):
             key = self.keyboard[3 + i]  # C1 starts at index 3
             self.assertEqual(key.name, expected_name)
-            self.assertEqual(key.type, expected_type)
+            self.assertEqual(key.color, expected_color)
 
     def test_white_keys_count(self):
         """Test that there are 52 white keys"""
         white_keys = self.keyboard.get_white_keys()
         self.assertEqual(len(white_keys), 52)
         for key in white_keys:
-            self.assertEqual(key.type, 'W')
+            self.assertEqual(key.color, 'W')
 
     def test_black_keys_count(self):
         """Test that there are 36 black keys"""
         black_keys = self.keyboard.get_black_keys()
         self.assertEqual(len(black_keys), 36)
         for key in black_keys:
-            self.assertEqual(key.type, 'B')
+            self.assertEqual(key.color, 'B')
 
     def test_find_key_by_name(self):
         """Test finding keys by name"""
@@ -94,12 +93,12 @@ class TestPianoKeyboard(unittest.TestCase):
         c4_key = self.keyboard.find_key_by_name('C4')
         self.assertIsNotNone(c4_key)
         self.assertEqual(c4_key.name, 'C4')
-        self.assertEqual(c4_key.type, 'W')
+        self.assertEqual(c4_key.color, 'W')
 
         fs3_key = self.keyboard.find_key_by_name('F#3')
         self.assertIsNotNone(fs3_key)
         self.assertEqual(fs3_key.name, 'F#3')
-        self.assertEqual(fs3_key.type, 'B')
+        self.assertEqual(fs3_key.color, 'B')
 
         # Test non-existing key
         invalid_key = self.keyboard.find_key_by_name('X9')
@@ -145,7 +144,7 @@ class TestPianoKeyboard(unittest.TestCase):
         # Test that repr contains expected elements
         self.assertIn("PianoKeyboard with 88 keys:", repr_str)
         self.assertIn("Index", repr_str)
-        self.assertIn("Type", repr_str)
+        self.assertIn("Color", repr_str)
         self.assertIn("Name", repr_str)
         self.assertIn("X", repr_str)
         self.assertIn("Y", repr_str)
@@ -178,7 +177,7 @@ class TestPianoKeyboard(unittest.TestCase):
         """Test that middle C (C4) has correct properties"""
         middle_c = self.keyboard.find_key_by_name('C4')
         self.assertIsNotNone(middle_c)
-        self.assertEqual(middle_c.type, 'W')
+        self.assertEqual(middle_c.color, 'W')
         self.assertEqual(middle_c.name, 'C4')
 
     def test_all_keys_have_default_none_values(self):
