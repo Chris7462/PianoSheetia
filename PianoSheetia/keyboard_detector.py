@@ -13,8 +13,9 @@ class KeyboardDetector:
     # Key positioning constants (as ratios of piano height)
     _white_key_y_ratio = 0.75  # White keys in lower portion of piano
     _black_key_y_ratio = 0.35  # Black keys in upper portion of piano
+    _jnd = 7 # Just noticeable difference (JND) for perceptual is about 5-10 levels
 
-    def __init__(self, template_path: str, activation_threshold: float = 20.0):
+    def __init__(self, template_path: str):
         if not template_path:
             raise ValueError("template_path is required and cannot be empty")
 
@@ -29,9 +30,6 @@ class KeyboardDetector:
 
         # Piano boundary storage
         self.piano_boundary = None  # Stores (x, y, width, height) of detected piano boundary
-
-        # Key activation threshold
-        self.activation_threshold = activation_threshold
 
         # Load template immediately since path is validated
         self._load_template(template_path)
@@ -84,14 +82,17 @@ class KeyboardDetector:
         half = 2
 
         for key in keyboard:
-            if key.x is not None and key.y is not None:
-                # Sample 5x5 grid and take average for brightness at this position
-                brightness = float(np.mean(
-                    gray_image[key.y-half:key.y+half+1,
-                               key.x-half:key.x+half+1]))
+            # Sample 5x5 grid and take average for brightness at this position
+            region = gray_image[key.y-half:key.y+half+1, key.x-half:key.x+half+1]
+            mean_brightness = np.mean(region)
 
-                # Update the key brightness
-                key.brightness = brightness
+            if key.color == 'W':  # White keys: bias toward brighter values
+                brightness = np.ceil(mean_brightness).astype(int).item()
+            else:  # Black keys: bias toward darker values
+                brightness = np.floor(mean_brightness).astype(int).item()
+
+            # Update the key brightness
+            key.brightness = brightness
 
         # Calculate baseline values using IQR approach
         self._calculate_baselines(keyboard)
@@ -136,7 +137,7 @@ class KeyboardDetector:
 
             # Take average of values between Q1 and Q3 (inclusive)
             iqr_values = white_brightness[q1_idx:q3_idx + 1]
-            keyboard.white_baseline = sum(iqr_values) / len(iqr_values)
+            keyboard.white_baseline = round(np.ceil(sum(iqr_values) / len(iqr_values)))
 
         # Calculate black key baseline using IQR
         if black_brightness:
@@ -147,7 +148,7 @@ class KeyboardDetector:
 
             # Take average of values between Q1 and Q3 (inclusive)
             iqr_values = black_brightness[q1_idx:q3_idx + 1]
-            keyboard.black_baseline = sum(iqr_values) / len(iqr_values)
+            keyboard.black_baseline = round(np.floor(sum(iqr_values) / len(iqr_values)))
 
     def _detect_piano_boundary(self, gray_image: np.ndarray, confidence_threshold: float = 0.7) -> Optional[Tuple[int, int, int, int]]:
         """
@@ -327,7 +328,7 @@ class KeyboardDetector:
         middle_c = keyboard[middle_c_index]
 
         if (middle_c.brightness is None or
-            abs(middle_c.brightness - keyboard.white_baseline) > self.activation_threshold):
+            abs(middle_c.brightness - keyboard.white_baseline) > self._jnd):
             raise ValueError(f"Middle C verification failed: Index 39 brightness"
                              f"({middle_c.brightness}) is outside of the white key baseline."
                              f"This suggests the key positioning is incorrect.")
@@ -347,10 +348,10 @@ class KeyboardDetector:
                 raise ValueError(f"Middle C verification failed: Key at index {key_index}"
                                  f"({key.name}) has no brightness value.")
 
-            if expected_color == 'W' and abs(key.brightness - keyboard.white_baseline) > self.activation_threshold:
+            if expected_color == 'W' and abs(key.brightness - keyboard.white_baseline) > self._jnd:
                 raise ValueError(f"Middle C verification failed: Expected white key at index {key_index}"
                                  f"({key.name}), but brightness ({key.brightness:.1f}) is outside of the baseline.")
-            elif expected_color == 'B' and abs(key.brightness - keyboard.black_baseline) > self.activation_threshold:
+            elif expected_color == 'B' and abs(key.brightness - keyboard.black_baseline) > self._jnd:
                 raise ValueError(f"Middle C verification failed: Expected black key at index {key_index}"
                                  f"({key.name}), but brightness ({key.brightness:.1f}) is outside of the baseline.")
 

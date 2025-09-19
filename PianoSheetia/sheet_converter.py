@@ -44,7 +44,7 @@ class SheetConverter:
         # Initialize components
         self.video_downloader = VideoDownloader()
         self.keyboard = PianoKeyboard()
-        self.detector = KeyboardDetector(template_path, activation_threshold)
+        self.detector = KeyboardDetector(template_path)
         self.midi_generator = None  # Will be created once we know the FPS
 
     def convert(self, video_path: str, output_path: str = "output/out.mid") -> bool:
