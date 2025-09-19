@@ -26,7 +26,7 @@ class SheetConverter:
     delegated to the MidiGenerator class.
     """
 
-    def __init__(self, activation_threshold: int = 30,
+    def __init__(self, activation_threshold: int = 20,
                  template_path: str = "data/template/piano-88-keys-0_5.png",
                  show_progress: bool = True):
         """
@@ -44,7 +44,7 @@ class SheetConverter:
         # Initialize components
         self.video_downloader = VideoDownloader()
         self.keyboard = PianoKeyboard()
-        self.detector = KeyboardDetector(template_path)
+        self.detector = KeyboardDetector(template_path, activation_threshold)
         self.midi_generator = None  # Will be created once we know the FPS
 
     def convert(self, video_path: str, output_path: str = "output/out.mid") -> bool:
@@ -161,10 +161,6 @@ class SheetConverter:
 
         print("Keyboard detection successful!")
 
-        # Store default brightness values for comparison
-        for key in self.keyboard:
-            key.default_brightness = key.brightness
-
         # Create visualization of detected keys using the visualization function
         create_detection_visualization(
             image=first_frame,
@@ -186,8 +182,14 @@ class SheetConverter:
             List of key states (0/1) or None if processing failed
         """
         try:
-            # Sample current brightness at all key positions
-            self._sample_brightness(image)
+            # Convert to grayscale if needed
+            if len(image.shape) == 3:
+                gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            else:
+                gray_image = image
+
+            # Sample brightness at all key positions using the detector
+            self.detector.sample_brightness(gray_image, self.keyboard)
 
             # Detect and return pressed keys
             return self._get_pressed_keys()
@@ -196,30 +198,21 @@ class SheetConverter:
             print(f"Error processing frame: {e}")
             return None
 
-    def _sample_brightness(self, image):
-        """Sample current brightness values for all keys."""
-        # Convert to grayscale if needed
-        if len(image.shape) == 3:
-            gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        else:
-            gray_image = image
-
-        # Sample brightness at each key position
-        for key in self.keyboard:
-            if key.x is not None and key.y is not None:
-                # Ensure coordinates are within image bounds
-                y = min(max(0, key.y), gray_image.shape[0] - 1)
-                x = min(max(0, key.x), gray_image.shape[1] - 1)
-                key.brightness = float(gray_image[y, x])
-
     def _get_pressed_keys(self) -> List[int]:
-        """Determine which keys are currently pressed based on brightness changes."""
+        """Determine which keys are currently pressed based on brightness changes from baseline."""
         pressed = []
         for key in self.keyboard:
-            if key.brightness is None or key.default_brightness is None:
-                pressed.append(0)
-            elif abs(key.brightness - key.default_brightness) > self.activation_threshold:
-                pressed.append(1)
-            else:
-                pressed.append(0)
+            if key.color == 'W':
+                # White key - compare to white baseline
+                if abs(key.brightness - self.keyboard.white_baseline) > self.activation_threshold:
+                    pressed.append(1)
+                else:
+                    pressed.append(0)
+            else:  # Black key
+                # Black key - compare to black baseline
+                if abs(key.brightness - self.keyboard.black_baseline) > self.activation_threshold:
+                    pressed.append(1)
+                else:
+                    pressed.append(0)
         return pressed
+

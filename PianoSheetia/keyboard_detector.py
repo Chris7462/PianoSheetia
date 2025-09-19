@@ -14,7 +14,7 @@ class KeyboardDetector:
     _WHITE_KEY_Y_RATIO = 0.75  # White keys in lower portion of piano
     _BLACK_KEY_Y_RATIO = 0.35  # Black keys in upper portion of piano
 
-    def __init__(self, template_path: str):
+    def __init__(self, template_path: str, activation_threshold: float = 20.0):
         if not template_path:
             raise ValueError("template_path is required and cannot be empty")
 
@@ -29,6 +29,9 @@ class KeyboardDetector:
 
         # Piano boundary storage
         self.piano_boundary = None  # Stores (x, y, width, height) of detected piano boundary
+
+        # Key activation threshold
+        self.activation_threshold = activation_threshold
 
         # Load template immediately since path is validated
         self._load_template(template_path)
@@ -57,16 +60,41 @@ class KeyboardDetector:
                 print("Failed to detect piano boundary - cannot proceed with key detection")
                 return False
 
-            # Step 2: Calculate key positions and sample brightness
-            if not self._calculate_key_positions_and_sample_brightness(gray_image, keyboard):
-                return False
+            # Step 2: Calculate key positions
+            self._calculate_key_positions(keyboard)
 
-            # Step 3: Validate layout
+            # Step 3: Sample brightness values
+            self.sample_brightness(gray_image, keyboard)
+
+            # Step 4: Validate layout
             return self._verify_layout(keyboard)
 
         except Exception as e:
             print(f"Error during key detection: {e}")
             return False
+
+    def sample_brightness(self, gray_image: np.ndarray, keyboard: PianoKeyboard) -> None:
+        """
+        Sample brightness values at key positions and calculate baseline values
+
+        Args:
+            gray_image: Grayscale input image
+            keyboard: PianoKeyboard object to update with brightness values and baselines
+        """
+        half = 2
+
+        for key in keyboard:
+            if key.x is not None and key.y is not None:
+                # Sample 5x5 grid and take average for brightness at this position
+                brightness = float(np.mean(
+                    gray_image[key.y-half:key.y+half+1,
+                               key.x-half:key.x+half+1]))
+
+                # Update the key brightness
+                key.brightness = brightness
+
+        # Calculate baseline values using IQR approach
+        self._calculate_baselines(keyboard)
 
     def _load_template(self, template_path: str) -> bool:
         """Load piano template for boundary detection with validation"""
@@ -85,6 +113,41 @@ class KeyboardDetector:
         except Exception as e:
             print(f"Error loading template: {e}")
             return False
+
+    def _calculate_baselines(self, keyboard: PianoKeyboard) -> None:
+        """
+        Calculate baseline brightness values for white and black keys using IQR approach
+
+        Args:
+            keyboard: PianoKeyboard object to update with baseline values
+        """
+        # Collect brightness values for white and black keys separately
+        white_brightness = [key.brightness for key in keyboard
+                           if key.color == 'W' and key.brightness is not None]
+        black_brightness = [key.brightness for key in keyboard
+                           if key.color == 'B' and key.brightness is not None]
+
+        # Calculate white key baseline using IQR
+        if white_brightness:
+            white_brightness.sort()
+            n = len(white_brightness)
+            q1_idx = n // 4
+            q3_idx = (3 * n) // 4
+
+            # Take average of values between Q1 and Q3 (inclusive)
+            iqr_values = white_brightness[q1_idx:q3_idx + 1]
+            keyboard.white_baseline = sum(iqr_values) / len(iqr_values)
+
+        # Calculate black key baseline using IQR
+        if black_brightness:
+            black_brightness.sort()
+            n = len(black_brightness)
+            q1_idx = n // 4
+            q3_idx = (3 * n) // 4
+
+            # Take average of values between Q1 and Q3 (inclusive)
+            iqr_values = black_brightness[q1_idx:q3_idx + 1]
+            keyboard.black_baseline = sum(iqr_values) / len(iqr_values)
 
     def _detect_piano_boundary(self, gray_image: np.ndarray, confidence_threshold: float = 0.7) -> Optional[Tuple[int, int, int, int]]:
         """
@@ -147,16 +210,12 @@ class KeyboardDetector:
         print(f"Piano boundary detected: confidence={best_confidence:.3f}, scale={best_scale:.2f}, size={w}x{h}")
         return (x, y, w, h)
 
-    def _calculate_key_positions_and_sample_brightness(self, gray_image: np.ndarray, keyboard: PianoKeyboard) -> bool:
+    def _calculate_key_positions(self, keyboard: PianoKeyboard) -> None:
         """
-        Calculate positions for all keys and sample their brightness values
+        Calculate positions for all keys based on detected piano boundary
 
         Args:
-            image: Input keyboard image
-            keyboard: PianoKeyboard object to update
-
-        Returns:
-            bool: True if positioning is successful, False otherwise
+            keyboard: PianoKeyboard object to update with x, y coordinates
         """
         # Calculate white key positions first
         piano_x, piano_y, piano_w, piano_h = self.piano_boundary
@@ -172,13 +231,9 @@ class KeyboardDetector:
                 # Calculate white key position
                 white_x = piano_x + int((white_index + 0.5) * white_key_width)
 
-                # Sample brightness at this position
-                brightness = float(gray_image[white_y, white_x])
-
-                # Update the key
+                # Update the key position
                 keyboard[i].x = white_x
                 keyboard[i].y = white_y
-                keyboard[i].brightness = brightness
 
                 white_index += 1
 
@@ -207,16 +262,11 @@ class KeyboardDetector:
                     case 'A':
                         black_x = int(left_white_key.x * 0.3 + right_white_key.x * 0.7)
 
-                # Sample brightness at this position
-                brightness = float(gray_image[black_y, black_x])
-
-                # Update the key
+                # Update the key position
                 keyboard[i].x = black_x
                 keyboard[i].y = black_y
-                keyboard[i].brightness = brightness
 
-        print(f"Successfully detected and positioned {len(keyboard)} piano keys")
-        return True
+        print(f"Successfully calculated positions for {len(keyboard)} piano keys")
 
     def _verify_layout(self, keyboard: PianoKeyboard) -> bool:
         """
@@ -263,7 +313,6 @@ class KeyboardDetector:
         Verify that the calculated middle C (index 39) is correct using brightness pattern matching.
 
         Middle C should be a white key, and we verify the surrounding pattern matches piano structure.
-        Uses 128 as threshold: white keys >= 128, black keys < 128.
 
         Args:
             keyboard: PianoKeyboard object with positioned keys and brightness values
@@ -274,15 +323,16 @@ class KeyboardDetector:
         Raises:
             ValueError: If middle C verification fails
         """
-        # TODO: Think about a better way to verify the brightness
-        THRESHOLD = 128
         middle_c_index = 39  # Middle C4 position in 88-key piano (0-indexed)
 
         # First check: Middle C (index 39) must be a white key
         middle_c = keyboard[middle_c_index]
 
-        if middle_c.brightness is None or middle_c.brightness < THRESHOLD:
-            raise ValueError(f"Middle C verification failed: Index 39 brightness ({middle_c.brightness}) is below white key threshold ({THRESHOLD}). This suggests the key positioning is incorrect.")
+        if (middle_c.brightness is None or
+            abs(middle_c.brightness - keyboard.white_baseline) > self.activation_threshold):
+            raise ValueError(f"Middle C verification failed: Index 39 brightness"
+                             f"({middle_c.brightness}) is outside of the white key baseline."
+                             f"This suggests the key positioning is incorrect.")
 
         # Second check: Verify the 12-key pattern around Middle C (6 keys left + middle C + 5 keys right)
         # This covers a full octave from F#3 to F4, centered on middle C
@@ -296,12 +346,15 @@ class KeyboardDetector:
             key = keyboard[key_index]
 
             if key.brightness is None:
-                raise ValueError(f"Middle C verification failed: Key at index {key_index} ({key.name}) has no brightness value.")
+                raise ValueError(f"Middle C verification failed: Key at index {key_index}"
+                                 f"({key.name}) has no brightness value.")
 
-            if expected_color == 'W' and key.brightness < THRESHOLD:
-                raise ValueError(f"Middle C verification failed: Expected white key at index {key_index} ({key.name}), but brightness ({key.brightness:.1f}) indicates black key.")
-            elif expected_color == 'B' and key.brightness >= THRESHOLD:
-                raise ValueError(f"Middle C verification failed: Expected black key at index {key_index} ({key.name}), but brightness ({key.brightness:.1f}) indicates white key.")
+            if expected_color == 'W' and abs(key.brightness - keyboard.white_baseline) > self.activation_threshold:
+                raise ValueError(f"Middle C verification failed: Expected white key at index {key_index}"
+                                 f"({key.name}), but brightness ({key.brightness:.1f}) is outside of the baseline.")
+            elif expected_color == 'B' and abs(key.brightness - keyboard.black_baseline) > self.activation_threshold:
+                raise ValueError(f"Middle C verification failed: Expected black key at index {key_index}"
+                                 f"({key.name}), but brightness ({key.brightness:.1f}) is outside of the baseline.")
 
         print(f"Middle C verification successful: Index 39 ({middle_c.name}) brightness = {middle_c.brightness:.1f}")
         print(f"12-key octave pattern verification successful.")

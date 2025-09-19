@@ -22,7 +22,6 @@ class PianoKey:
     x: Optional[int] = None
     y: Optional[int] = None
     brightness: Optional[float] = None
-    default_brightness: Optional[float] = None  # Baseline brightness for comparison
 
 
 class PianoKeyboard:
@@ -32,6 +31,9 @@ class PianoKeyboard:
     _TOTAL_KEYS: Final[int] = 88
     _OCTAVE_COLOR_PATTERN: Final[list[str]] = ['W', 'B', 'W', 'B', 'W', 'W', 'B', 'W', 'B', 'W', 'B', 'W']
     _NOTE_NAMES: Final[list[str]] = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+    white_baseline: float = None
+    black_baseline: float = None
 
     def __init__(self):
         self.keys = self._create_keys()
@@ -109,17 +111,32 @@ class PianoKeyboard:
     def __repr__(self) -> str:
         """Return a detailed string representation of the piano keyboard"""
         lines = [f"PianoKeyboard with {self._TOTAL_KEYS} keys:"]
-        lines.append('-' * 80)
-        lines.append(f'{"Index":<5} {"Color":<5} {"Name":<6} {"X":<8} {"Y":<8} {"Brightness":<12} {"Default"}')
-        lines.append('-' * 80)
+        lines.append('-' * 50)
+        lines.append(f'{"Index":<5} {"Color":<5} {"Name":<5} {"X":<8} {"Y":<8} {"Brightness":<8}')
+        lines.append('-' * 50)
 
         for key in self.keys:
             x_str = str(key.x) if key.x is not None else "None"
             y_str = str(key.y) if key.y is not None else "None"
             brightness_str = f"{key.brightness:.3f}" if key.brightness is not None else "None"
-            default_str = f"{key.default_brightness:.3f}" if key.default_brightness is not None else "None"
 
             lines.append(f"{key.index:<5} {key.color:<5} {key.name:<6}"
-                         f"{x_str:<8} {y_str:<8} {brightness_str:<12} {default_str}")
+                         f"{x_str:<8} {y_str:<8} {brightness_str:<8}")
+
+        white_baseline_str = (
+            f"{self.white_baseline:.3f}"
+            if self.white_baseline is not None
+            else "None"
+        )
+
+        lines.append(f"\nWhite baseline: {white_baseline_str}")
+
+        black_baseline_str = (
+            f"{self.black_baseline:.3f}"
+            if self.black_baseline is not None
+            else "None"
+        )
+
+        lines.append(f"Black baseline: {black_baseline_str}")
 
         return "\n".join(lines)
