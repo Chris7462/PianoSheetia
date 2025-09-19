@@ -52,8 +52,8 @@ class TestKeyboardDetector(unittest.TestCase):
         """Test detector class constants"""
         detector = KeyboardDetector(self.template_path)
         self.assertEqual(detector._NUM_WHITE_KEYS, 52)
-        self.assertEqual(detector._WHITE_KEY_Y_RATIO, 0.75)
-        self.assertEqual(detector._BLACK_KEY_Y_RATIO, 0.35)
+        self.assertEqual(detector._white_key_y_ratio, 0.75)
+        self.assertEqual(detector._black_key_y_ratio, 0.35)
 
     def create_mock_piano_image(self, width=800, height=300):
         """Helper method to create a mock piano image for testing"""
