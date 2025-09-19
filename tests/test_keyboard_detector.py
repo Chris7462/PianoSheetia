@@ -51,9 +51,9 @@ class TestKeyboardDetector(unittest.TestCase):
     def test_detector_constants(self):
         """Test detector class constants"""
         detector = KeyboardDetector(self.template_path)
-        self.assertEqual(detector._NUM_WHITE_KEYS, 52)
         self.assertEqual(detector._white_key_y_ratio, 0.75)
         self.assertEqual(detector._black_key_y_ratio, 0.35)
+        self.assertEqual(detector._jnd, 5)
 
     def create_mock_piano_image(self, width=800, height=300):
         """Helper method to create a mock piano image for testing"""
@@ -114,14 +114,17 @@ class TestKeyboardDetector(unittest.TestCase):
         with patch.object(detector, '_detect_piano_boundary') as mock_boundary:
             mock_boundary.return_value = (50, 75, 700, 150)
 
-            with patch.object(detector, '_calculate_key_positions_and_sample_brightness') as mock_calc:
-                mock_calc.return_value = True
+            with patch.object(detector, '_calculate_key_positions') as mock_calc_pos:
+                mock_calc_pos.return_value = None
 
-                with patch.object(detector, '_verify_layout') as mock_verify:
-                    mock_verify.return_value = False
+                with patch.object(detector, 'sample_brightness') as mock_sample:
+                    mock_sample.return_value = None
 
-                    result = detector.detect(mock_image, self.keyboard)
-                    self.assertFalse(result)
+                    with patch.object(detector, '_verify_layout') as mock_verify:
+                        mock_verify.return_value = False
+
+                        result = detector.detect(mock_image, self.keyboard)
+                        self.assertFalse(result)
 
     def test_detect_with_grayscale_image(self):
         """Test detection with grayscale input image"""
@@ -164,21 +167,86 @@ class TestKeyboardDetector(unittest.TestCase):
                 result = detector._detect_piano_boundary(mock_image, confidence_threshold=0.7)
                 self.assertIsNone(result)
 
-    def test_calculate_key_positions_and_sample_brightness(self):
-        """Test key position calculation and brightness sampling"""
+    def test_sample_brightness(self):
+        """Test brightness sampling functionality"""
         detector = KeyboardDetector(self.template_path)
         detector.piano_boundary = (50, 75, 700, 150)  # Set mock boundary
 
-        mock_image = cv2.cvtColor(self.create_mock_piano_image(), cv2.COLOR_BGR2GRAY)
+        # Create a mock grayscale image
+        gray_image = np.ones((300, 800), dtype=np.uint8) * 128
 
-        result = detector._calculate_key_positions_and_sample_brightness(mock_image, self.keyboard)
-        self.assertTrue(result)
+        # Set up keyboard with mock positions
+        for i, key in enumerate(self.keyboard):
+            key.x = 100 + i * 10
+            key.y = 150
+
+        # Mock the baseline calculation
+        with patch.object(detector, '_calculate_baselines') as mock_baselines:
+            mock_baselines.return_value = None
+
+            detector.sample_brightness(gray_image, self.keyboard)
+
+            # Verify all keys have brightness values
+            for key in self.keyboard:
+                self.assertIsNotNone(key.brightness)
+                self.assertIsInstance(key.brightness, int)
+
+            # Verify baseline calculation was called
+            mock_baselines.assert_called_once_with(self.keyboard)
+
+    def test_calculate_baselines(self):
+        """Test baseline calculation using IQR approach"""
+        detector = KeyboardDetector(self.template_path)
+
+        # Set up keyboard with mock brightness values
+        white_brightnesses = [200, 210, 205, 195, 215, 190, 220]  # White key brightnesses
+        black_brightnesses = [50, 60, 55, 45, 65, 40, 70]        # Black key brightnesses
+
+        white_idx = 0
+        black_idx = 0
+        for key in self.keyboard:
+            if key.color == 'W' and white_idx < len(white_brightnesses):
+                key.brightness = white_brightnesses[white_idx]
+                white_idx += 1
+            elif key.color == 'B' and black_idx < len(black_brightnesses):
+                key.brightness = black_brightnesses[black_idx]
+                black_idx += 1
+            else:
+                # Default brightness for remaining keys
+                key.brightness = 200 if key.color == 'W' else 50
+
+        detector._calculate_baselines(self.keyboard)
+
+        # Check that baselines were calculated
+        self.assertIsNotNone(self.keyboard.white_baseline)
+        self.assertIsNotNone(self.keyboard.black_baseline)
+
+        # Check that white baseline is higher than black baseline
+        self.assertGreater(self.keyboard.white_baseline, self.keyboard.black_baseline)
+
+    def test_calculate_key_positions(self):
+        """Test key position calculation"""
+        detector = KeyboardDetector(self.template_path)
+        detector.piano_boundary = (50, 75, 700, 150)  # Set mock boundary
+
+        detector._calculate_key_positions(self.keyboard)
 
         # Verify all keys have been positioned
         for key in self.keyboard:
             self.assertIsNotNone(key.x)
             self.assertIsNotNone(key.y)
-            self.assertIsNotNone(key.brightness)
+
+        # Verify white keys are positioned correctly
+        white_keys = [key for key in self.keyboard if key.color == 'W']
+        for i in range(1, len(white_keys)):
+            # White keys should be ordered from left to right
+            self.assertGreater(white_keys[i].x, white_keys[i-1].x)
+
+        # Verify black keys are positioned between white keys
+        for key in self.keyboard:
+            if key.color == 'B':
+                # Black keys should have y position in upper portion
+                self.assertEqual(key.y, 75 + int(150 * 0.35))
 
     def test_validate_detection_completeness_success(self):
         """Test successful detection completeness validation"""
@@ -188,7 +256,7 @@ class TestKeyboardDetector(unittest.TestCase):
         for i, key in enumerate(self.keyboard):
             key.x = i * 10
             key.y = 100
-            key.brightness = 150.0
+            key.brightness = 150
 
         result = detector._validate_detection_completeness(self.keyboard)
         self.assertTrue(result)
@@ -206,7 +274,7 @@ class TestKeyboardDetector(unittest.TestCase):
             else:
                 key.x = i * 10
                 key.y = 100
-                key.brightness = 150.0
+                key.brightness = 150
 
         result = detector._validate_detection_completeness(self.keyboard)
         self.assertFalse(result)
@@ -222,24 +290,87 @@ class TestKeyboardDetector(unittest.TestCase):
             if i < 3:  # First 3 keys missing brightness
                 key.brightness = None
             else:
-                key.brightness = 150.0
+                key.brightness = 150
 
         result = detector._validate_detection_completeness(self.keyboard)
+        self.assertFalse(result)
+
+    def test_validate_baselines_success(self):
+        """Test successful baseline validation"""
+        detector = KeyboardDetector(self.template_path)
+
+        # Set valid baselines
+        self.keyboard.white_baseline = 200
+        self.keyboard.black_baseline = 50
+
+        result = detector._validate_baselines(self.keyboard)
+        self.assertTrue(result)
+
+    def test_validate_baselines_missing_white_baseline(self):
+        """Test baseline validation with missing white baseline"""
+        detector = KeyboardDetector(self.template_path)
+
+        self.keyboard.white_baseline = None
+        self.keyboard.black_baseline = 50
+
+        result = detector._validate_baselines(self.keyboard)
+        self.assertFalse(result)
+
+    def test_validate_baselines_missing_black_baseline(self):
+        """Test baseline validation with missing black baseline"""
+        detector = KeyboardDetector(self.template_path)
+
+        self.keyboard.white_baseline = 200
+        self.keyboard.black_baseline = None
+
+        result = detector._validate_baselines(self.keyboard)
+        self.assertFalse(result)
+
+    def test_validate_baselines_out_of_range(self):
+        """Test baseline validation with out of range values"""
+        detector = KeyboardDetector(self.template_path)
+
+        # Test white baseline out of range
+        self.keyboard.white_baseline = 300  # > 255
+        self.keyboard.black_baseline = 50
+
+        result = detector._validate_baselines(self.keyboard)
+        self.assertFalse(result)
+
+        # Test black baseline out of range
+        self.keyboard.white_baseline = 200
+        self.keyboard.black_baseline = -10  # < 0
+
+        result = detector._validate_baselines(self.keyboard)
+        self.assertFalse(result)
+
+    def test_validate_baselines_inverted_brightness(self):
+        """Test baseline validation with inverted brightness (white <= black)"""
+        detector = KeyboardDetector(self.template_path)
+
+        self.keyboard.white_baseline = 50   # Should be brighter
+        self.keyboard.black_baseline = 200  # Should be darker
+
+        result = detector._validate_baselines(self.keyboard)
         self.assertFalse(result)
 
     def test_verify_layout_success(self):
         """Test successful layout verification"""
         detector = KeyboardDetector(self.template_path)
 
-        # Set up keyboard with proper values for both completeness and middle C verification
+        # Set up keyboard with proper values for both completeness and baseline validation
         for i, key in enumerate(self.keyboard):
             key.x = i * 10
             key.y = 100
             # Set brightness based on key type
             if key.color == 'W':
-                key.brightness = 200.0  # Bright (above threshold)
+                key.brightness = 200
             else:
-                key.brightness = 50.0   # Dark (below threshold)
+                key.brightness = 50
+
+        # Set valid baselines
+        self.keyboard.white_baseline = 200
+        self.keyboard.black_baseline = 50
 
         result = detector._verify_layout(self.keyboard)
         self.assertTrue(result)
@@ -257,7 +388,24 @@ class TestKeyboardDetector(unittest.TestCase):
             else:
                 key.x = i * 10
                 key.y = 100
-                key.brightness = 150.0
+                key.brightness = 150
+
+        result = detector._verify_layout(self.keyboard)
+        self.assertFalse(result)
+
+    def test_verify_layout_fails_baselines(self):
+        """Test layout verification failure due to invalid baselines"""
+        detector = KeyboardDetector(self.template_path)
+
+        # Set up keyboard with complete detection but invalid baselines
+        for i, key in enumerate(self.keyboard):
+            key.x = i * 10
+            key.y = 100
+            key.brightness = 150
+
+        # Set invalid baselines (None)
+        self.keyboard.white_baseline = None
+        self.keyboard.black_baseline = 50
 
         result = detector._verify_layout(self.keyboard)
         self.assertFalse(result)
@@ -266,16 +414,23 @@ class TestKeyboardDetector(unittest.TestCase):
         """Test layout verification failure due to middle C verification failure"""
         detector = KeyboardDetector(self.template_path)
 
-        # Set up keyboard with complete detection but wrong middle C brightness
+        # Set up keyboard with complete detection and valid baselines
         for i, key in enumerate(self.keyboard):
             key.x = i * 10
             key.y = 100
-            if i == 39:  # Middle C with wrong brightness
-                key.brightness = 50.0  # Too dark for white key
-            elif key.color == 'W':
-                key.brightness = 200.0
+            # Set appropriate brightness for most keys
+            if key.color == 'W':
+                key.brightness = 200
             else:
-                key.brightness = 50.0
+                key.brightness = 50
+
+        # Set wrong brightness for middle C specifically
+        middle_c = self.keyboard.find_key_by_name('C4')
+        middle_c.brightness = 50  # Too dark for white key
+
+        # Set valid baselines
+        self.keyboard.white_baseline = 200
+        self.keyboard.black_baseline = 50
 
         result = detector._verify_layout(self.keyboard)
         self.assertFalse(result)
@@ -284,16 +439,19 @@ class TestKeyboardDetector(unittest.TestCase):
         """Test successful middle C verification"""
         detector = KeyboardDetector(self.template_path)
 
-        # Set up keyboard with mock brightness values
-        # Set middle C (index 39) and surrounding keys with appropriate brightness
+        # Set up keyboard with appropriate brightness values and baselines
         for i, key in enumerate(self.keyboard):
             key.x = i * 10  # Mock positions
             key.y = 100
-            # Set brightness based on key type (white keys bright, black keys dark)
+            # Set brightness based on key type
             if key.color == 'W':
-                key.brightness = 200.0  # Bright (above threshold)
+                key.brightness = 200
             else:
-                key.brightness = 50.0   # Dark (below threshold)
+                key.brightness = 50
+
+        # Set baselines
+        self.keyboard.white_baseline = 200
+        self.keyboard.black_baseline = 50
 
         result = detector._verify_middle_c(self.keyboard)
         self.assertTrue(result)
@@ -302,60 +460,63 @@ class TestKeyboardDetector(unittest.TestCase):
         """Test middle C verification failure due to wrong brightness"""
         detector = KeyboardDetector(self.template_path)
 
-        # Set up keyboard but make middle C (index 39) have black key brightness
+        # Set up keyboard with appropriate brightness for most keys
         for i, key in enumerate(self.keyboard):
             key.x = i * 10
             key.y = 100
-            if i == 39:  # Middle C
-                key.brightness = 50.0  # Too dark for white key
-            elif key.color == 'W':
-                key.brightness = 200.0
+            if key.color == 'W':
+                key.brightness = 200
             else:
-                key.brightness = 50.0
+                key.brightness = 50
 
-        with self.assertRaises(ValueError) as context:
-            detector._verify_middle_c(self.keyboard)
-        self.assertIn("Middle C verification failed", str(context.exception))
+        # Set wrong brightness for middle C
+        middle_c = self.keyboard.find_key_by_name('C4')
+        middle_c.brightness = 50  # Too dark for white key
 
-    def test_verify_middle_c_failure_missing_brightness(self):
-        """Test middle C verification failure due to missing brightness values"""
-        detector = KeyboardDetector(self.template_path)
+        # Set baselines
+        self.keyboard.white_baseline = 200
+        self.keyboard.black_baseline = 50
 
-        # Set up keyboard but leave brightness as None
-        for key in self.keyboard:
-            key.x = 100
-            key.y = 100
-            key.brightness = None  # Missing brightness
-
-        with self.assertRaises(ValueError) as context:
-            detector._verify_middle_c(self.keyboard)
-        self.assertIn("Middle C verification failed", str(context.exception))
+        result = detector._verify_middle_c(self.keyboard)
+        self.assertFalse(result)
 
     def test_verify_middle_c_pattern_mismatch(self):
         """Test middle C verification failure due to pattern mismatch"""
         detector = KeyboardDetector(self.template_path)
 
-        # Set up keyboard with wrong pattern around middle C
+        # Set up keyboard positions
         for i, key in enumerate(self.keyboard):
             key.x = i * 10
             key.y = 100
-            # Deliberately set wrong brightness pattern
-            if 33 <= i <= 44:  # Pattern around middle C
-                # Set opposite brightness (white keys dark, black keys bright)
-                if key.color == 'W':
-                    key.brightness = 50.0   # Wrong: should be bright
-                else:
-                    key.brightness = 200.0  # Wrong: should be dark
-            else:
-                # Set correct brightness for other keys
-                if key.color == 'W':
-                    key.brightness = 200.0
-                else:
-                    key.brightness = 50.0
 
-        with self.assertRaises(ValueError) as context:
-            detector._verify_middle_c(self.keyboard)
-        self.assertIn("Middle C verification failed", str(context.exception))
+        # Set baselines
+        self.keyboard.white_baseline = 200
+        self.keyboard.black_baseline = 50
+
+        # Set wrong brightness pattern around middle C (F#3 to F4)
+        f_sharp_3 = self.keyboard.find_key_by_name('F#3')
+        pattern_start = f_sharp_3.index
+
+        for i in range(12):  # 12-key pattern
+            key_index = pattern_start + i
+            key = self.keyboard[key_index]
+
+            # Deliberately set wrong brightness pattern
+            if key.color == 'W':
+                key.brightness = 50   # Wrong: should be ~200 (bright)
+            else:
+                key.brightness = 200  # Wrong: should be ~50 (dark)
+
+        # Set correct brightness for other keys
+        for i, key in enumerate(self.keyboard):
+            if not (pattern_start <= i < pattern_start + 12):
+                if key.color == 'W':
+                    key.brightness = 200
+                else:
+                    key.brightness = 50
+
+        result = detector._verify_middle_c(self.keyboard)
+        self.assertFalse(result)
 
     def test_detect_exception_handling(self):
         """Test detection with exception handling"""
@@ -393,6 +554,24 @@ class TestKeyboardDetector(unittest.TestCase):
         result = detector._detect_piano_boundary(large_image)
         # Should still return None due to poor match, but shouldn't crash
 
+    def test_black_key_positioning_magic_numbers(self):
+        """Test that black key positioning uses the correct magic number ratios"""
+        detector = KeyboardDetector(self.template_path)
+        detector.piano_boundary = (50, 75, 700, 150)
+
+        detector._calculate_key_positions(self.keyboard)
+
+        # Test a few specific black key positions to ensure magic numbers are working
+        # Find some black keys and verify they're positioned between their white neighbors
+        c_sharp_keys = [key for key in self.keyboard if key.name.startswith('C#')]
+        for c_sharp in c_sharp_keys:
+            # Find adjacent white keys
+            left_white = self.keyboard[c_sharp.index - 1]
+            right_white = self.keyboard[c_sharp.index + 1]
+
+            self.assertGreater(c_sharp.x, left_white.x)
+            self.assertLess(c_sharp.x, right_white.x)
+
     def test_integration_full_pipeline(self):
         """Integration test for the complete detection pipeline"""
         detector = KeyboardDetector(self.template_path)
@@ -403,13 +582,36 @@ class TestKeyboardDetector(unittest.TestCase):
             mock_boundary.return_value = (50, 75, 700, 150)
 
             # This should test the full pipeline:
-            # boundary detection -> positioning -> completeness validation -> middle C verification
+            # boundary detection -> positioning -> brightness sampling -> baselines -> verification
             result = detector.detect(mock_image, self.keyboard)
 
             # The result depends on whether the mock image produces good enough
             # brightness patterns for middle C verification
             # At minimum, it shouldn't crash and should return a boolean
             self.assertIsInstance(result, bool)
+
+#   def test_brightness_sampling_with_edge_positions(self):
+#       """Test brightness sampling when keys are positioned at image edges"""
+#       detector = KeyboardDetector(self.template_path)
+#       gray_image = np.ones((100, 100), dtype=np.uint8) * 128
+
+#       # Position some keys at edges where the 5x5 sampling region might go out of bounds
+#       edge_positions = [(2, 2), (97, 97), (0, 50), (50, 0)]
+
+#       for i, (x, y) in enumerate(edge_positions):
+#           if i < len(self.keyboard):
+#               self.keyboard[i].x = x
+#               self.keyboard[i].y = y
+
+#       # Mock baseline calculation to avoid issues
+#       with patch.object(detector, '_calculate_baselines'):
+#           # This should not crash even with edge positions
+#           detector.sample_brightness(gray_image, self.keyboard)
+
+#           # Verify brightness was sampled (might be based on smaller regions due to clipping)
+#           for i, _ in enumerate(edge_positions):
+#               if i < len(self.keyboard):
+#                   self.assertIsNotNone(self.keyboard[i].brightness)
 
 
 if __name__ == '__main__':

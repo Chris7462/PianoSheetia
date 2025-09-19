@@ -21,7 +21,7 @@ class PianoKey:
     # Mutable properties (updated by detector)
     x: Optional[int] = None
     y: Optional[int] = None
-    brightness: Optional[float] = None
+    brightness: Optional[int] = None
 
 
 class PianoKeyboard:
@@ -30,8 +30,8 @@ class PianoKeyboard:
     # Piano structure constants
     _total_keys: Final[int] = 88
 
-    white_baseline: float = None
-    black_baseline: float = None
+    white_baseline: int = None
+    black_baseline: int = None
 
     def __init__(self):
         self.keys = self._create_keys()
@@ -118,13 +118,13 @@ class PianoKeyboard:
         for key in self.keys:
             x_str = str(key.x) if key.x is not None else "None"
             y_str = str(key.y) if key.y is not None else "None"
-            brightness_str = f"{key.brightness:.3f}" if key.brightness is not None else "None"
+            brightness_str = str(key.brightness) if key.brightness is not None else "None"
 
             lines.append(f"{key.index:<5} {key.color:<5} {key.name:<6}"
                          f"{x_str:<8} {y_str:<8} {brightness_str:<8}")
 
         white_baseline_str = (
-            f"{self.white_baseline:.3f}"
+            f"{self.white_baseline}"
             if self.white_baseline is not None
             else "None"
         )
@@ -132,7 +132,7 @@ class PianoKeyboard:
         lines.append(f"\nWhite baseline: {white_baseline_str}")
 
         black_baseline_str = (
-            f"{self.black_baseline:.3f}"
+            f"{self.black_baseline}"
             if self.black_baseline is not None
             else "None"
         )
