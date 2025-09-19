@@ -13,7 +13,7 @@ class KeyboardDetector:
     # Key positioning constants (as ratios of piano height)
     _white_key_y_ratio = 0.75  # White keys in lower portion of piano
     _black_key_y_ratio = 0.35  # Black keys in upper portion of piano
-    _jnd = 7 # Just noticeable difference (JND) for perceptual is about 5-10 levels
+    _jnd = 5 # Just noticeable difference (JND) for perceptual is about 5-10 levels
 
     def __init__(self, template_path: str):
         if not template_path:
@@ -52,7 +52,7 @@ class KeyboardDetector:
             else:
                 gray_image = image.copy()
 
-            # Step 1: Detect piano boundary using template matching
+            # Step 1: Detect piano boundwhite_brightnessary using template matching
             self.piano_boundary = self._detect_piano_boundary(gray_image)
             if self.piano_boundary is None:
                 print("Failed to detect piano boundary - cannot proceed with key detection")
@@ -123,10 +123,8 @@ class KeyboardDetector:
             keyboard: PianoKeyboard object to update with baseline values
         """
         # Collect brightness values for white and black keys separately
-        white_brightness = [key.brightness for key in keyboard
-                           if key.color == 'W' and key.brightness is not None]
-        black_brightness = [key.brightness for key in keyboard
-                           if key.color == 'B' and key.brightness is not None]
+        white_brightness = [key.brightness for key in keyboard if key.color == 'W']
+        black_brightness = [key.brightness for key in keyboard if key.color == 'B']
 
         # Calculate white key baseline using IQR
         if white_brightness:
@@ -281,7 +279,11 @@ class KeyboardDetector:
         if not self._validate_detection_completeness(keyboard):
             return False
 
-        # Check 2: Verify middle C and surrounding pattern
+        # Check 2: Validate baseline calculations
+        if not self._validate_baselines(keyboard):
+            return False
+
+        # Check 3: Verify middle C and surrounding pattern
         try:
             return self._verify_middle_c(keyboard)
         except ValueError as e:
@@ -307,6 +309,44 @@ class KeyboardDetector:
 
         return True
 
+    def _validate_baselines(self, keyboard: PianoKeyboard) -> bool:
+        """
+        Validate that baseline brightness values have been properly calculated
+
+        Args:
+            keyboard: PianoKeyboard object to validate
+
+        Returns:
+            bool: True if baselines are valid, False otherwise
+        """
+        # Check if white baseline is calculated
+        if keyboard.white_baseline is None:
+            print("Layout verification failed: White key baseline not calculated")
+            return False
+
+        # Check if black baseline is calculated
+        if keyboard.black_baseline is None:
+            print("Layout verification failed: Black key baseline not calculated")
+            return False
+
+        # Check it baseline values are reasonable (0-255 for 8-bit grayscale)
+        if not (0 <= keyboard.white_baseline <= 255):
+            print(f"Layout verification failed: White baseline ({keyboard.white_baseline}) out of valid range [0-255]")
+            return False
+
+        if not (0 <= keyboard.black_baseline <= 255):
+            print(f"Layout verification failed: Black baseline ({keyboard.black_baseline}) out of valid range [0-255]")
+            return False
+
+        # Check if white keys are generally brighter than black keys
+        if keyboard.white_baseline <= keyboard.black_baseline:
+            print(f"Layout verification warning: White baseline ({keyboard.white_baseline}) "
+                  f"should typically be brighter than black baseline ({keyboard.black_baseline})")
+            return False
+
+        print(f"Baseline validation successful: White={keyboard.white_baseline}, Black={keyboard.black_baseline}")
+        return True
+
     def _verify_middle_c(self, keyboard: PianoKeyboard) -> bool:
         """
         Verify that the calculated middle C (index 39) is correct using brightness pattern matching.
@@ -317,45 +357,50 @@ class KeyboardDetector:
             keyboard: PianoKeyboard object with positioned keys and brightness values
 
         Returns:
-            True if middle C at index 39 appears correct
-
-        Raises:
-            ValueError: If middle C verification fails
+            bool: True if middle C verification passes, False otherwise
         """
-        middle_c_index = 39  # Middle C4 position in 88-key piano (0-indexed)
 
         # First check: Middle C (index 39) must be a white key
-        middle_c = keyboard[middle_c_index]
+        middle_c = keyboard.find_key_by_name('C4')
 
-        if (middle_c.brightness is None or
-            abs(middle_c.brightness - keyboard.white_baseline) > self._jnd):
-            raise ValueError(f"Middle C verification failed: Index 39 brightness"
-                             f"({middle_c.brightness}) is outside of the white key baseline."
-                             f"This suggests the key positioning is incorrect.")
+        if abs(middle_c.brightness - keyboard.white_baseline) > self._jnd:
+            print(f"Middle C verification failed: Middle C brightness ({middle_c.brightness}) "
+                  f"is outside of the white key baseline ({keyboard.white_baseline} ± {self._jnd}). "
+                  f"This suggests the key positioning is incorrect.")
+            return False
 
         # Second check: Verify the 12-key pattern around Middle C (6 keys left + middle C + 5 keys right)
         # This covers a full octave from F#3 to F4, centered on middle C
         # Pattern: indices 33-44 representing F#3-G3-G#3-A3-A#3-B3-C4-C#4-D4-D#4-E4-F4
         # Expected key types: B-W-B-W-B-W-W-B-W-B-W-W (one complete octave pattern)
         expected_colors = ['B', 'W', 'B', 'W', 'B', 'W', 'W', 'B', 'W', 'B', 'W', 'W']
-        pattern_start = 33  # Start from F#3 (5 keys left of middle C)
+        pattern_start = keyboard.find_key_by_name('F#3').index  # Start from F#3 (5 keys left of middle C)
 
         for i, expected_color in enumerate(expected_colors):
             key_index = pattern_start + i
             key = keyboard[key_index]
 
-            if key.brightness is None:
-                raise ValueError(f"Middle C verification failed: Key at index {key_index}"
-                                 f"({key.name}) has no brightness value.")
+            # Sanity check: verify the theoretical key color matches expected pattern
+            if key.color != expected_color:
+                print(f"Middle C verification failed: Key at index {key_index} ({key.name}) "
+                      f"has color '{key.color}' but expected '{expected_color}'. "
+                      f"This indicates a problem with the piano layout or pattern definition.")
+                return False
 
-            if expected_color == 'W' and abs(key.brightness - keyboard.white_baseline) > self._jnd:
-                raise ValueError(f"Middle C verification failed: Expected white key at index {key_index}"
-                                 f"({key.name}), but brightness ({key.brightness:.1f}) is outside of the baseline.")
-            elif expected_color == 'B' and abs(key.brightness - keyboard.black_baseline) > self._jnd:
-                raise ValueError(f"Middle C verification failed: Expected black key at index {key_index}"
-                                 f"({key.name}), but brightness ({key.brightness:.1f}) is outside of the baseline.")
+            # Check if key matches expected color based on brightness
+            if expected_color == 'W':
+                if abs(key.brightness - keyboard.white_baseline) > self._jnd:
+                    print(f"Middle C verification failed: Expected white key at index {key_index} "
+                          f"({key.name}), but brightness ({key.brightness}) is outside of the "
+                          f"white baseline ({keyboard.white_baseline} ± {self._jnd})")
+                    return False
+            else:  # expected_color == 'B'
+                if abs(key.brightness - keyboard.black_baseline) > self._jnd:
+                    print(f"Middle C verification failed: Expected black key at index {key_index} "
+                          f"({key.name}), but brightness ({key.brightness}) is outside of the "
+                          f"black baseline ({keyboard.black_baseline} ± {self._jnd})")
+                    return False
 
-        print(f"Middle C verification successful: Index 39 ({middle_c.name}) brightness = {middle_c.brightness:.1f}")
-        print(f"12-key octave pattern verification successful.")
-
+        print(f"Middle C verification successful: Middle C ({middle_c.name}) brightness = {middle_c.brightness}")
+        print(f"12-key octave pattern verification successful")
         return True
