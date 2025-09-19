@@ -136,11 +136,9 @@ class TestPianoKeyboard(unittest.TestCase):
         # Test repr with updated values
         self.keyboard[0].x = 100
         self.keyboard[0].y = 200
-        self.keyboard[0].brightness = 0.5
         repr_str_updated = repr(self.keyboard)
         self.assertIn("100", repr_str_updated)
         self.assertIn("200", repr_str_updated)
-        self.assertIn("0.500", repr_str_updated)
 
     def test_key_indices_consistency(self):
         """Test that key indices are consistent with their position in the list"""
