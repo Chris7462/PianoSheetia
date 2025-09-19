@@ -11,8 +11,8 @@ class KeyboardDetector:
     Computer vision detector for locating piano keys in images
     """
     # Key positioning constants (as ratios of piano height)
-    _WHITE_KEY_Y_RATIO = 0.75  # White keys in lower portion of piano
-    _BLACK_KEY_Y_RATIO = 0.35  # Black keys in upper portion of piano
+    _white_key_y_ratio = 0.75  # White keys in lower portion of piano
+    _black_key_y_ratio = 0.35  # Black keys in upper portion of piano
 
     def __init__(self, template_path: str, activation_threshold: float = 20.0):
         if not template_path:
@@ -220,7 +220,7 @@ class KeyboardDetector:
         # Calculate white key positions first
         piano_x, piano_y, piano_w, piano_h = self.piano_boundary
         white_key_width = piano_w / keyboard.white_key_count
-        white_y = piano_y + int(piano_h * self._WHITE_KEY_Y_RATIO)
+        white_y = piano_y + int(piano_h * self._white_key_y_ratio)
 
         keyboard_key_colors = keyboard.get_key_colors()
 
@@ -238,7 +238,7 @@ class KeyboardDetector:
                 white_index += 1
 
         # Position black keys
-        black_y = piano_y + int(piano_h * self._BLACK_KEY_Y_RATIO)
+        black_y = piano_y + int(piano_h * self._black_key_y_ratio)
 
         for i, key_type in enumerate(keyboard_key_colors):
             if key_type == 'B':
@@ -265,8 +265,6 @@ class KeyboardDetector:
                 # Update the key position
                 keyboard[i].x = black_x
                 keyboard[i].y = black_y
-
-        print(f"Successfully calculated positions for {len(keyboard)} piano keys")
 
     def _verify_layout(self, keyboard: PianoKeyboard) -> bool:
         """

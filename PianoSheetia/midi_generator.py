@@ -18,9 +18,9 @@ class MidiGenerator:
     """
 
     # MIDI constants
-    MIDI_VELOCITY_ON = 64
-    MIDI_VELOCITY_OFF = 127
-    MIDI_TICKS_PER_BEAT = 480
+    _midi_velocity_on = 64
+    _midi_velocity_off = 127
+    _midi_ticks_per_beat = 480
 
     def __init__(self, fps: float):
         """
@@ -30,7 +30,7 @@ class MidiGenerator:
             fps: Video frames per second for timing calculations
         """
         self.fps = fps
-        self.midi_file = MidiFile(ticks_per_beat=self.MIDI_TICKS_PER_BEAT)
+        self.midi_file = MidiFile(ticks_per_beat=self._midi_ticks_per_beat)
         self.track = MidiTrack()
         self.midi_file.tracks.append(self.track)
 
@@ -58,12 +58,12 @@ class MidiGenerator:
                 if current_state == 1:
                     # Note on
                     event = Message('note_on', note=midi_note,
-                                  velocity=self.MIDI_VELOCITY_ON,
+                                  velocity=self._midi_velocity_on,
                                   time=0)  # Will set time for first event only
                 else:
                     # Note off
                     event = Message('note_off', note=midi_note,
-                                  velocity=self.MIDI_VELOCITY_OFF,
+                                  velocity=self._midi_velocity_off,
                                   time=0)  # Will set time for first event only
 
                 events_in_this_frame.append(event)
@@ -74,7 +74,7 @@ class MidiGenerator:
             if self.last_mod == 0 and self.frame_count > self.fps:
                 self.last_mod = self.frame_count - self.fps
 
-            time_delta = int((self.frame_count - self.last_mod) * (self.MIDI_TICKS_PER_BEAT / self.fps))
+            time_delta = int((self.frame_count - self.last_mod) * (self._midi_ticks_per_beat / self.fps))
 
             # First event gets the time delta, rest get 0
             events_in_this_frame[0].time = time_delta

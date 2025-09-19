@@ -28,52 +28,13 @@ class PianoKeyboard:
     """Represents a complete 88-key piano keyboard with structure and key data"""
 
     # Piano structure constants
-    _TOTAL_KEYS: Final[int] = 88
-    _OCTAVE_COLOR_PATTERN: Final[list[str]] = ['W', 'B', 'W', 'B', 'W', 'W', 'B', 'W', 'B', 'W', 'B', 'W']
-    _NOTE_NAMES: Final[list[str]] = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    _total_keys: Final[int] = 88
 
     white_baseline: float = None
     black_baseline: float = None
 
     def __init__(self):
         self.keys = self._create_keys()
-
-    def _create_keys(self) -> List[PianoKey]:
-        """Create all 88 piano keys efficiently"""
-        key_colors = self._get_key_colors()
-        note_names = self._get_note_names()
-
-        return [
-            PianoKey(index=i, color=key_colors[i], name=note_names[i])
-            for i in range(self._TOTAL_KEYS)
-        ]
-
-    def _get_key_colors(self) -> List[str]:
-        """Generate the complete 88-key color pattern efficiently"""
-        # Start with A0, A#0, B0
-        colors = ['W', 'B', 'W']
-
-        # Add 7 complete octaves (84 keys: 12 * 7)
-        colors.extend(self._OCTAVE_COLOR_PATTERN * 7)
-
-        # Add final C8
-        colors.append('W')
-
-        return colors
-
-    def _get_note_names(self) -> List[str]:
-        """Generate note names for all 88 keys efficiently"""
-        # Start with A0, A#0, B0
-        names = ['A0', 'A#0', 'B0']
-
-        # Add 7 complete octaves
-        for octave in range(1, 8):
-            names.extend(f"{note}{octave}" for note in self._NOTE_NAMES)
-
-        # Add final C8
-        names.append('C8')
-
-        return names
 
     @property
     def white_key_count(self) -> int:
@@ -83,7 +44,7 @@ class PianoKeyboard:
     @property
     def black_key_count(self) -> int:
         """Number of black keys on the piano"""
-        return self._TOTAL_KEYS - self.white_key_count
+        return self._total_keys - self.white_key_count
 
     def find_key_by_name(self, name: str) -> Optional[PianoKey]:
         """Find a key by its note name (e.g., 'C4', 'F#3')"""
@@ -96,13 +57,52 @@ class PianoKeyboard:
         """Return list of key colors for compatibility with detector"""
         return [key.color for key in self.keys]
 
+    def _create_keys(self) -> List[PianoKey]:
+        """Create all 88 piano keys efficiently"""
+        key_colors = self._generate_key_color_pattern()
+        note_names = self._generate_key_note_names()
+
+        return [
+            PianoKey(index=i, color=key_colors[i], name=note_names[i])
+            for i in range(self._total_keys)
+        ]
+
+    def _generate_key_color_pattern(self) -> List[str]:
+        """Generate the complete 88-key color pattern efficiently"""
+        # Start with A0, A#0, B0
+        colors = ['W', 'B', 'W']
+
+        # Add 7 complete octaves (84 keys: 12 * 7)
+        octave_color_pattern = ['W', 'B', 'W', 'B', 'W', 'W', 'B', 'W', 'B', 'W', 'B', 'W']
+        colors.extend(octave_color_pattern * 7)
+
+        # Add final C8
+        colors.append('W')
+
+        return colors
+
+    def _generate_key_note_names(self) -> List[str]:
+        """Generate note names for all 88 keys efficiently"""
+        # Start with A0, A#0, B0
+        names = ['A0', 'A#0', 'B0']
+
+        # Add 7 complete octaves
+        note_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        for octave in range(1, 8):
+            names.extend(f"{note}{octave}" for note in note_names)
+
+        # Add final C8
+        names.append('C8')
+
+        return names
+
     def __getitem__(self, index: int) -> PianoKey:
         """Allow keyboard[i] access to keys"""
         return self.keys[index]
 
     def __len__(self) -> int:
         """Return number of keys"""
-        return self._TOTAL_KEYS
+        return self._total_keys
 
     def __iter__(self) -> Iterator[PianoKey]:
         """Allow iteration over keys"""
@@ -110,7 +110,7 @@ class PianoKeyboard:
 
     def __repr__(self) -> str:
         """Return a detailed string representation of the piano keyboard"""
-        lines = [f"PianoKeyboard with {self._TOTAL_KEYS} keys:"]
+        lines = [f"PianoKeyboard with {self._total_keys} keys:"]
         lines.append('-' * 50)
         lines.append(f'{"Index":<5} {"Color":<5} {"Name":<5} {"X":<8} {"Y":<8} {"Brightness":<8}')
         lines.append('-' * 50)
