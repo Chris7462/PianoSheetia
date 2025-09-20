@@ -75,16 +75,21 @@ class SheetConverter:
             # Initialize MIDI generator with FPS
             self.midi_generator = MidiGenerator(fps)
 
-            # Process first frame for keyboard detection
-            success, first_frame = video_capture.read()
-            if not success:
-                print("Could not read first frame from video")
+            # Detect keyboard layout using multi-point sampling
+            detection_result = self._detect_keyboard_layout(video_capture, fps, total_frames)
+            if not detection_result:
                 video_capture.release()
                 return False
 
-            if not self._detect_keyboard_layout(first_frame):
-                video_capture.release()
-                return False
+            best_frame, best_confidence = detection_result
+
+            # Create visualization using the best detection frame
+            create_detection_visualization(
+                image=best_frame,
+                keyboard=self.keyboard,
+                piano_boundary=self.detector.piano_boundary,
+                output_path="output/keyboard_detection.jpg"
+            )
 
             # Reset video to beginning and process all frames
             video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -148,28 +153,85 @@ class SheetConverter:
 
         return video_capture
 
-    def _detect_keyboard_layout(self, first_frame) -> bool:
-        """Detect keyboard layout on the first frame."""
-        print("Detecting keyboard layout...")
+    def _detect_keyboard_layout(self, video_capture: cv2.VideoCapture, fps: float, total_frames: int) -> Optional[tuple]:
+        """
+        Detect keyboard layout using multi-point sampling strategy.
 
-        if not self.detector.detect(first_frame, self.keyboard):
-            print("Failed to detect keyboard. Please check:")
-            print("1. Template file exists and is valid")
-            print("2. Video contains a visible piano")
-            print("3. Piano is clearly visible in the first frame")
-            return False
+        Samples frames at 0.0, 0.5, 1.0, 1.5, ..., 5.0 seconds and selects
+        the frame with the highest template matching confidence.
 
-        print("Keyboard detection successful!")
+        Args:
+            video_capture: OpenCV VideoCapture object
+            fps: Video frames per second
+            total_frames: Total number of frames in video
 
-        # Create visualization of detected keys using the visualization function
-        create_detection_visualization(
-            image=first_frame,
-            keyboard=self.keyboard,
-            piano_boundary=self.detector.piano_boundary,
-            output_path="output/keyboard_detection.jpg"
-        )
+        Returns:
+            Tuple of (best_frame, best_confidence) if successful, None if failed
+        """
+        print("Detecting keyboard layout using multi-point sampling...")
 
-        return True
+        # Define sampling times (0.0, 0.5, 1.0, ..., 5.0 seconds)
+        sampling_times = [i * 0.5 for i in range(11)]  # [0.0, 0.5, 1.0, ..., 5.0]
+
+        best_confidence = 0.0
+        best_frame = None
+        best_detection_successful = False
+
+        # Early stopping threshold
+        early_stop_threshold = 0.85
+
+        for time_seconds in sampling_times:
+            # Convert time to frame number
+            frame_number = int(time_seconds * fps)
+
+            # Skip if frame number exceeds video length
+            if frame_number >= total_frames:
+                print(f"Skipping time {time_seconds}s (frame {frame_number}) - beyond video length")
+                continue
+
+            # Seek to the target frame
+            video_capture.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+            success, frame = video_capture.read()
+
+            if not success:
+                print(f"Failed to read frame at {time_seconds}s (frame {frame_number})")
+                continue
+
+            print(f"Testing frame at {time_seconds}s (frame {frame_number})...")
+
+            # Create a temporary keyboard for this detection attempt
+            temp_keyboard = PianoKeyboard()
+
+            # Attempt detection on this frame
+            result = self.detector.detect(frame, temp_keyboard)
+            if result is not None:
+                confidence = result.confidence
+
+                print(f"Detection successful at {time_seconds}s with confidence {confidence:.3f}")
+
+                # Update best match if this is better
+                if confidence > best_confidence:
+                    best_confidence = confidence
+                    best_frame = frame.copy()
+                    # Copy the successful detection to our main keyboard
+                    self.keyboard = temp_keyboard
+                    best_detection_successful = True
+
+                # Early stopping if confidence is very high
+                if confidence >= early_stop_threshold:
+                    print(f"Early stopping: confidence {confidence:.3f} >= {early_stop_threshold}")
+                    break
+
+            else:
+                print(f"Detection failed at {time_seconds}s")
+
+        if not best_detection_successful:
+            print("Keyboard detection failed at all sampled time points.")
+            print("The template may not be suitable for this video.")
+            return None
+
+        print(f"Best detection found with confidence {best_confidence:.3f}")
+        return best_frame, best_confidence
 
     def _process_frame(self, image) -> Optional[List[int]]:
         """
