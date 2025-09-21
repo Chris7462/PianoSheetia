@@ -15,10 +15,11 @@
 *.pyc
 *.mid
 *.jpg
-*.pdf
+*.mp4
 
 # Ignore build, devel, and logs folder
 log
 __pycache__
 .vscode
 videos
+output

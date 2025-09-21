@@ -13,7 +13,7 @@ import yt_dlp
 class VideoDownloader:
     """Handles video file operations and frame processing"""
 
-    def __init__(self, output_dir: str = 'data/videos/'):
+    def __init__(self, output_dir: str = 'videos'):
         self.output_dir = output_dir
         # Create output directory once during initialization
         os.makedirs(self.output_dir, exist_ok=True)

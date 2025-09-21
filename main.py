@@ -10,11 +10,9 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     ap.add_argument('video', help='YouTube URL or local video file (.mp4)')
-    ap.add_argument('-o', '--output', type=str, default='output/out.mid',
-                    help='Output MIDI file name (default: output/out.mid)')
     ap.add_argument('-t', '--threshold', type=int, default=30,
                     help='Activation threshold for key press detection (default: 30)')
-    ap.add_argument('--template', type=str, default='data/template/piano-88-keys-0_5.png',
+    ap.add_argument('--template', type=str, default='template/piano-88-keys.png',
                     help='Path to piano template file for detection')
 
     args = ap.parse_args()
@@ -26,7 +24,7 @@ def main():
     )
 
     # Perform the conversion
-    success = converter.convert(args.video, args.output)
+    success = converter.convert(args.video)
 
     if not success:
         print("Conversion failed!")

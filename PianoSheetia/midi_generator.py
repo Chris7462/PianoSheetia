@@ -20,7 +20,7 @@ class MidiGenerator:
     """
 
     # MIDI constants
-    _midi_velocity_off = 64  # Fixed release velocity (was incorrectly 127)
+    _midi_velocity_off = 64
     _base_ticks_per_beat = 480
 
     def __init__(self, fps: float, dynamic_velocity: bool = True):
