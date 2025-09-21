@@ -10,7 +10,7 @@ from .video_downloader import VideoDownloader
 from .keyboard_detector import KeyboardDetector
 from .sheet_converter import SheetConverter
 from .midi_generator import MidiGenerator
-from .keyboard_visualizer import create_brightness_visualization, create_detection_visualization
+from .keyboard_visualizer import create_detection_visualization
 
 # Package metadata
 __version__ = "0.1.0"
@@ -26,7 +26,6 @@ __all__ = [
     "KeyboardDetector",
     "SheetConverter",
     "MidiGenerator",
-    "create_brightness_visualization",
     "create_detection_visualization",
 ]
 

@@ -2,8 +2,24 @@ import cv2
 import numpy as np
 from typing import Tuple, Optional
 import os
+from dataclasses import dataclass
 
 from .piano_keyboard import PianoKeyboard
+
+
+@dataclass
+class DetectionResult:
+    """Detection result containing bounding box and confidence score"""
+    x: int
+    y: int
+    w: int
+    h: int
+    confidence: float
+
+    @property
+    def bbox(self) -> Tuple[int, int, int, int]:
+        """Return (x, y, w, h) tuple for convenience"""
+        return (self.x, self.y, self.w, self.h)
 
 
 class KeyboardDetector:
@@ -13,7 +29,7 @@ class KeyboardDetector:
     # Key positioning constants (as ratios of piano height)
     _white_key_y_ratio = 0.75  # White keys in lower portion of piano
     _black_key_y_ratio = 0.35  # Black keys in upper portion of piano
-    _perceptual_threshold = 5  # Just noticeable difference (JND) for perceptual is about 5-10 levels
+    _perceptual_threshold = 7  # Just noticeable difference (JND) for perceptual is about 5-10 levels
 
     def __init__(self, template_path: str):
         if not template_path:
@@ -34,7 +50,7 @@ class KeyboardDetector:
         # Load template immediately since path is validated
         self._load_template(template_path)
 
-    def detect(self, image: np.ndarray, keyboard: PianoKeyboard) -> bool:
+    def detect(self, image: np.ndarray, keyboard: PianoKeyboard) -> Optional[DetectionResult]:
         """
         Main detection function that updates keyboard with positions and brightness
 
@@ -43,7 +59,7 @@ class KeyboardDetector:
             keyboard: PianoKeyboard object to update
 
         Returns:
-            bool: True if detection is successful, False otherwise
+            DetectionResult with bounding box and confidence if successful, None if failed
         """
         try:
             # Convert to grayscale once for all processing
@@ -52,11 +68,14 @@ class KeyboardDetector:
             else:
                 gray_image = image.copy()
 
-            # Step 1: Detect piano boundwhite_brightnessary using template matching
-            self.piano_boundary = self._detect_piano_boundary(gray_image)
-            if self.piano_boundary is None:
+            # Step 1: Detect piano boundary using template matching
+            boundary_result = self._detect_piano_boundary(gray_image)
+            if boundary_result is None:
                 print("Failed to detect piano boundary - cannot proceed with key detection")
-                return False
+                return None
+
+            # Store the result for brightness sampling
+            self.piano_boundary = boundary_result.bbox
 
             # Step 2: Calculate key positions
             self._calculate_key_positions(keyboard)
@@ -65,11 +84,14 @@ class KeyboardDetector:
             self.sample_brightness(gray_image, keyboard)
 
             # Step 4: Validate layout
-            return self._verify_layout(keyboard)
+            if not self._verify_layout(keyboard):
+                return None
+
+            return boundary_result
 
         except Exception as e:
             print(f"Error during key detection: {e}")
-            return False
+            return None
 
     def sample_brightness(self, gray_image: np.ndarray, keyboard: PianoKeyboard) -> None:
         """
@@ -115,7 +137,7 @@ class KeyboardDetector:
             print(f"Error loading template: {e}")
             return False
 
-    def _detect_piano_boundary(self, gray_image: np.ndarray, confidence_threshold: float = 0.7) -> Optional[Tuple[int, int, int, int]]:
+    def _detect_piano_boundary(self, gray_image: np.ndarray, confidence_threshold: float = 0.7) -> Optional[DetectionResult]:
         """
         Detect piano boundary using robust template matching
 
@@ -124,7 +146,7 @@ class KeyboardDetector:
             confidence_threshold: Minimum confidence for template match
 
         Returns:
-            Tuple (x, y, width, height) of piano boundary, or None if not found
+            DetectionResult with bounding box and confidence of piano boundary, or None if not found
         """
         if self._template_gray is None:
             print("Error: No template loaded for boundary detection")
@@ -174,7 +196,7 @@ class KeyboardDetector:
         w, h = best_template_size
 
         print(f"Piano boundary detected: confidence={best_confidence:.3f}, scale={best_scale:.2f}, size={w}x{h}")
-        return (x, y, w, h)
+        return DetectionResult(x, y, w, h, best_confidence)
 
     def _calculate_key_positions(self, keyboard: PianoKeyboard) -> None:
         """
