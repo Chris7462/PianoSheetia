@@ -3,6 +3,13 @@ A Python tool for converting Synthesia-style piano videos into MIDI files using 
 
 The system processes videos frame-by-frame, detecting which piano keys are pressed based on brightness changes from established baselines, then generates properly timed MIDI files that can be played back or imported into music software.
 
+## Demo
+<p align='center'>
+  <a href="https://youtu.be/JNZpLlN6WLU">
+    <img width="65%" src="/image/demo.gif"/>
+  </a>
+</p>
+
 ## Main Components
 **SheetConverter** - Main orchestrator class that handles the complete conversion pipeline from video input to MIDI output. Coordinates all other components and manages the conversion workflow.
 
